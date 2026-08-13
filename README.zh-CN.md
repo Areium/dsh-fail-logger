@@ -24,6 +24,12 @@
 <!-- PTC-FAIL-LOG:END -->
 ```
 
+| 会话中的失败（自动捕获） | skill 的自动实录区段 |
+|:---:|:---:|
+| ![会话失败示例](assets/demo-session.png) | ![skill 实录区段](assets/demo-skill.png) |
+
+*（脱敏示意图：内容取自真实会话失败记录，路径与用户名已用占位符替换，并已用视觉模型核验无 API key 等敏感信息）*
+
 ## 安装
 
 ```sh

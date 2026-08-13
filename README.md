@@ -24,6 +24,12 @@ The observation point is the **session log** (`session/event`) — the exact sam
 <!-- PTC-FAIL-LOG:END -->
 ```
 
+| Session failures (captured automatically) | Skill auto-log section |
+|:---:|:---:|
+| ![Session failure example](assets/demo-session.png) | ![Skill auto-log section](assets/demo-skill.png) |
+
+*(Sanitized illustrations: content comes from real session failures, paths and usernames replaced with placeholders, and vision-verified to contain no API keys or other sensitive data)*
+
 ## Install
 
 ```sh

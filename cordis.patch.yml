@@ -1,0 +1,3 @@
+- insert:
+    - id: ptc-fail-logger
+      name: 'ptc-fail-logger'

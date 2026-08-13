@@ -1,8 +1,8 @@
 {
-  "name": "ptc-fail-logger",
-  "version": "0.1.0",
+  "name": "dsh-fail-logger",
+  "version": "0.3.0",
   "type": "module",
-  "description": "DSH 插件：自动把 PTC（Code Mode）code run 失败实录写入 ptc-code-run-guide skill 的机器维护区段——按错因去重计数，下次会话模型加载 skill 时即可看到高频错因，减少重复犯错。Auto-log PTC code-run failures into a skill's machine-maintained section (dedup + counts).",
+  "description": "DSH 插件：全模式工具失败自动实录——把原生工具、PTC(Code Mode) run_code、代码内嵌工具调用的失败按错因去重计数，自动写入 skill 的机器维护区段，越用越少错。Auto-record tool failures from every execution mode into a skill's machine-maintained section (dedup + counts).",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<your-github-user>/ptc-fail-logger.git"
+    "url": "git+https://github.com/<your-github-user>/dsh-fail-logger.git"
   },
   "dsh": {
     "bundle": {
@@ -40,6 +40,7 @@
     "code-mode",
     "ptc",
     "fail-logger",
+    "tool-error",
     "skill"
   ],
   "license": "MIT",

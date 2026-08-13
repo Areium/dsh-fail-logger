@@ -1,67 +1,81 @@
-# ptc-fail-logger
+# dsh-fail-logger
 
-An automatic failure recorder for **PTC mode (Code Mode)** in DeepSeek Harness (DSH): every time the model's `run_code` fails, this plugin writes the cause into the machine-maintained section of the `ptc-code-run-guide` skill — deduplicated by message, counted, and sorted by frequency — so the next session's model sees the most common failure causes when it loads the skill. **Fail less over time.**
+A failure recorder for every execution mode in DeepSeek Harness: whether the agent runs in **native mode** or **PTC (Code Mode)**, any tool failure is automatically written into the machine-maintained section of a skill — deduplicated, counted, deterministically ranked, and bounded — so the next session's model sees the most common failure causes when it loads the skill. **Fail less over time.**
+
+## Coverage matrix
+
+| Execution mode | Failure source | Recorded as (kind / message) |
+|---|---|---|
+| Native tools (bash/read/edit/web_search/third-party plugin tools…) | `tool/call` + `tool/result` (isError) | `tool` / `[bash] EPERM: operation not permitted …` |
+| PTC `run_code` failures | `tool/result` (isError) | official kind (`exception`/`timeout`/`abort`/…) / raw message |
+| Nested tool calls inside a code program (`tools.*` throwing) | `tool/code-dispatch` (isError) | `tool` / `[read] ENOENT: no such file …` |
+
+The observation point is the **session log** (`session/event`) — the exact same hook the official telemetry plugin uses. Pure observer: no service injection, no runtime wrapping, can never affect execution.
 
 ## Effect
 
 ```
 <!-- PTC-FAIL-LOG:BEGIN -->
-## 自动实录（机器维护，勿手改；由 ptc-fail-logger 插件写入）
+## 自动实录（机器维护，勿手改；由 dsh-fail-logger 插件写入）
 
 - [exception] ReferenceError: require is not defined — ×3（最近 2026-08-14 02:00）
-- [exception] TypeError: res.stdout.slice is not a function — ×1（最近 2026-08-14 02:00）
+- [tool] [bash] EPERM: operation not permitted, open '/Users/me/.dsh/x' — ×2（最近 2026-08-14 02:00）
+- [timeout] compute budget exhausted (60000ms busy) — ×1（最近 2026-08-14 02:00）
 <!-- PTC-FAIL-LOG:END -->
 ```
 
 ## Install
 
 ```sh
-dsh plugin --profile web add "github:<your-user>/ptc-fail-logger"
+dsh plugin --profile web add "github:<your-user>/dsh-fail-logger"
 # or once published on npm:
-# dsh plugin --profile web add ptc-fail-logger
+# dsh plugin --profile web add dsh-fail-logger
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
 ```
 
-Restart `dsh --profile web`. Zero configuration, works out of the box.
-
-## How it works
-
-- `inject: ['codeRuntime']` grabs the host code-runtime service and wraps its `run()`: failures are captured as `{kind, message}`; successes/timeouts/aborts pass through untouched.
-- SHA1(kind + first-line message) dedup: the same cause is one entry, its counter increments.
-- Top `maxEntries` (default 10) causes by count are written into `~/.dsh/skills/ptc-code-run-guide/SKILL.md` between `<!-- PTC-FAIL-LOG:BEGIN/END -->` markers.
-- State lives in `.failures.json` next to the skill; delete it to reset history.
+Restart `dsh --profile web`. Zero configuration, works out of the box. Same for headless: `dsh plugin --profile headless add …`.
 
 ## Config (patch entry `config:`, all optional)
 
 ```yaml
 - insert:
-    - id: ptc-fail-logger
-      name: 'ptc-fail-logger'
+    - id: dsh-fail-logger
+      name: 'dsh-fail-logger'
       config:
-        logDir: /Users/me/.dsh/skills/ptc-code-run-guide  # log directory
+        logDir: /Users/me/.dsh/skills/ptc-code-run-guide  # target skill dir (companion ptc-code-run-guide by default)
         maxEntries: 10    # max rows in the auto section
         maxMsg: 200       # chars kept per message
-        marker: PTC-FAIL-LOG  # section marker id
+        marker: PTC-FAIL-LOG  # section marker id ([A-Za-z0-9-])
+        flushMs: 300      # burst-coalescing debounce window
 ```
+
+## How it works
+
+- Listens to `session/event`, consuming three event kinds only: `tool/call` (builds a callId→tool-name map, capped at 2048), `tool/result` (recorded only when isError), `tool/code-dispatch` (recorded only when isError).
+- `run_code` failure text is parsed into the official `CodeRunFailure.kind` plus the raw message; other tools are prefixed with `[tool-name]`.
+- SHA1(kind + first-line message) dedup: the same cause is one entry, its counter increments; ranking is a deterministic total order (count↓ → last↓ → first↓ → hash↑).
+- State lives in `.failures.json` next to the skill and is pruned beyond `maxEntries×5`; the section is written between `<!-- …:BEGIN/END -->` markers in SKILL.md — multiple sections collapse, dangling markers self-heal.
+- All writes are atomic (tmp + rename); corrupt state is backed up as `.bak-<timestamp>` before reset.
+
+## Known limitations
+
+- **Only failures that reach the session log**: catastrophic process death during tool execution, which cannot produce a `tool/result`, is out of scope.
+- **Cross-process counts are best-effort**: with both web and headless profiles mounted, each holds its own in-memory counts. Atomic writes guarantee files never corrupt; at worst one process overwrites a single increment — causes are never lost, only exact counts.
+- **Corrupt state is backed up**: an unparseable `.failures.json` is renamed to `.failures.json.bak-<timestamp>` before reset.
 
 ## How it differs from similar community plugins
 
-Skill-maintenance plugins like `distill` (conversation distillation into skills) and `dsh-skillport` (skill library import) are *proactive*: they generate/import skills on demand. This plugin is *passive*: it records factual run failures automatically. They complement each other.
+- `distill` (conversation distillation) and `dsh-skillport` (skill library import): *proactive* skill generation/import; this plugin *passively* records run facts. Complementary.
+- `dsh-trace` / `dsh-telemetry-redactor` (telemetry export to external platforms): external observability; this plugin targets *local skill self-healing* with no external channel.
+- `dsh-notify` (error notifications): alerts only; this plugin accumulates a searchable long-term memory.
 
 ## Development & tests
 
 ```sh
 npm run check   # node --check lib/index.js
-npm test        # unit tests: dedup/counts/section render/idempotence/custom config
+npm test        # 10 suites: all-mode event parsing/dedup/pruning/corruption recovery/marker healing/debounce/dispose flush
 ```
 
 ## License
 
 MIT
-
-## Known limitations
-
-- **Cross-process counts are best-effort**: with both web and headless profiles mounted, each holds its own in-memory counts. Flushes are atomic (tmp + rename, never corrupting files), but one process may occasionally overwrite a single increment — causes are never lost, only exact counts.
-- **Corrupt state is backed up**: an unparseable `.failures.json` is renamed to `.failures.json.bak-<timestamp>` before reset, so old data stays recoverable.
-- **Wraps the runtime instance present at apply time**: if another plugin replaces the whole `codeRuntime` service afterwards, this wrapper is bypassed (ordering-dependent).
-

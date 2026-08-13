@@ -1,8 +1,8 @@
 {
-  "id": "ptc-fail-logger",
-  "version": "0.1.0",
+  "id": "dsh-fail-logger",
+  "version": "0.3.0",
   "main": "./lib/index.js",
-  "description": "Auto-record PTC (Code Mode) code-run failures into the ptc-code-run-guide skill (dedup + counts, machine-maintained section)",
+  "description": "Auto-record tool failures from every execution mode (native tools, PTC run_code, nested tool calls) into a skill's machine-maintained section (dedup + counts)",
   "engines": {
     "dsh": ">=0.1.0-rc.0"
   },

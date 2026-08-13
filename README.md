@@ -30,7 +30,7 @@ The observation point is the **session log** (`session/event`) — the exact sam
 |:---:|:---:|
 | ![Session failure example](assets/demo-session.png) | ![Skill auto-log section](assets/demo-skill.png) |
 
-*(Sanitized illustrations: content comes from real session failures, paths and usernames replaced with placeholders, and vision-verified to contain no API keys or other sensitive data)*
+*Legend — left: tool failures in a session are captured automatically; right: the causes accumulate in the skill's auto-log section (deduplicated, counted, ranked by frequency).*
 
 ## Install
 

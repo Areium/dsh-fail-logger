@@ -43,7 +43,7 @@ The observation point is the **session log** (`session/event`) — the exact sam
 ## Install
 
 ```sh
-dsh plugin --profile web add "github:Areium/dsh-fail-logger"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.1"  # pin to a release tag for auditability & rollback
 # or once published on npm:
 # dsh plugin --profile web add dsh-fail-logger
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
@@ -64,7 +64,60 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
         marker: FAIL-LOG   # section marker id ([A-Za-z0-9-])
         flushMs: 300       # burst-coalescing debounce window
         ttlDays: 30        # drop entries with no new occurrence for N days (0 = keep forever)
-        redact: []         # extra redaction regexes (string array; common key/token shapes covered by default)
+        redact: []         # extra redaction regexes (string array)
+        ignore: []         # ignore list (tool-name/message regexes, e.g. ['^read
+```
+
+## How it works
+
+- Listens to `session/event`, consuming three event kinds: `tool/call` (callId→{tool name, args} map), `tool/result` (parses the real rc.6 shape: `message.content[].type === 'tool-result'` block's `isError`/`toolCallId`; legacy shape still supported), `tool/code-dispatch` (recorded only when isError). A one-time visible warning fires on unexpected shapes.
+- **Normalized dedup**: paths (quoted / drive-letter / absolute → `<path>`) and long numbers (→ `<n>`) are normalized before the SHA1 key — the same EPERM on `/Users/a/x` and `/Users/b/y` merges into one entry; `data.error.code` (e.g. `SEARCH_FAILED`) joins the key when present.
+- **Redaction & sanitization**: defaults cover `sk-…` keys, `Bearer`/`Basic` auth, `-u user:pass` and inline URL credentials, `api_key/token/secret/password=` assignments, credential file paths, and private IPs; extend via `config.redact`. Control chars stripped, markdown pipes/backticks escaped (anti inline injection).
+- **Cross-process lock-merge**: flush takes an exclusive lock (`wx`, stale >5s recycled) and re-reads + merges the on-disk state before writing — web/headless concurrency no longer loses increments; failed writes keep dirty and retry after 2s.
+- **Trend & TTL**: per-day counters render a "last 7 days" trend line; entries with no new occurrence for `ttlDays` are archived.
+- **Categorized rendering**: grouped under filesystem / permissions & sandbox / timeout & budget / network & remote / other, with rule-based 💡 suggestions; deterministic total-order ranking (count↓ → last↓ → first↓ → hash↑); state pruned beyond `maxEntries×5`.
+- All writes are atomic (tmp + rename); corrupt state is backed up as `.bak-<timestamp>` before reset; a visible startup line logs activation and probes logDir writability.
+
+## Known limitations
+
+- **Only failures that reach the session log**: catastrophic process death during tool execution is out of scope.
+- **Corrupt state is backed up**: an unparseable `.failures.json` is renamed to `.failures.json.bak-<timestamp>` before reset.
+- **Non-zero exit codes are not recorded**: see the trigger conditions (DSH semantics, not a plugin bug).
+- **Dedup is heuristic**: keyed on the normalized first 1-3 lines of text; the same root cause with different wording may split, and different causes with identical wording may merge — acceptable, but be aware.
+- **Display keeps the original text**: path/username normalization affects the dedup key only; messages display the original (except redaction rules). For stricter privacy, configure `config.redact` per workspace.
+
+## How it differs from similar community plugins
+
+- `distill` (conversation distillation) and `dsh-skillport` (skill library import): *proactive* skill generation/import; this plugin *passively* records run facts. Complementary.
+- `dsh-trace` / `dsh-telemetry-redactor` (telemetry export to external platforms): external observability; this plugin targets *local skill self-healing* with no external channel.
+- `dsh-notify` (error notifications): alerts only; this plugin accumulates a searchable long-term memory.
+
+## Design boundaries (explicit non-goals)
+
+- **No LLM summarization**: calling a model per failure adds cost, network and external dependencies, breaking the pure-observer positioning; rule-based suggestions suffice.
+- **No external export**: keeps a distinct niche from dsh-trace/telemetry.
+- **No proactive fixes**: record only, never auto-change behavior — avoids amplifying risk.
+- Roadmap: per-workspace failure memory isolation (`logDir` template / `@workspace` tags on entries).
+
+## Development & tests
+
+```sh
+npm run check   # node --check lib/index.js
+npm test        # 14 suites: real event-shape parsing/legacy compat/normalized dedup/redaction/pruning/TTL/corruption recovery/marker healing/debounce/dispose/lock contention/ignore list/log replay
+```
+
+**Real-log replay** (against fake-green tests): `FAIL_LOG_REPLAY=<session.jsonl> npm test` feeds real session events into the same handler. Session logs live at `~/.dsh/sessions/**/session.jsonl` (run `zstd -d` first if compressed). `tests/fixtures/session.jsonl` is a real-shape fixture run by CI on every push.
+
+**Post-install smoke test**:
+
+```sh
+dsh --profile headless "use the read tool on a file that does not exist"   # trigger a guaranteed failure
+tail -20 ~/.dsh/skills/fail-log-guide/SKILL.md                              # FAIL-LOG section with the cause should appear
+```
+
+## License
+
+MIT, 'deliberate|noise'])
 ```
 
 ## How it works

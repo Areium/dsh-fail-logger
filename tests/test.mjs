@@ -1,5 +1,6 @@
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert';
 
@@ -251,7 +252,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f12-'));
   process.env.FAIL_LOG_DIR = dir;
-  process.env.FAIL_LOG_REPLAY = new URL('./fixtures/session.jsonl', import.meta.url).pathname;
+  process.env.FAIL_LOG_REPLAY = fileURLToPath(new URL('./fixtures/session.jsonl', import.meta.url));
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   mod.apply(mkCtx(), {});   // 回放模式：同步喂事件 + 直刷，不订阅 session/event
@@ -269,4 +270,45 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (12 suites)');
+// ===== 13：跨进程锁竞争（flush 延迟重试，不丢计数）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f13-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  writeFileSync(join(dir, '.failures.json.lock'), '99999');   // 模拟另一进程持有的新锁
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'lock contention', true));
+  await sleep(450);   // 首次 flush(300ms) 拿不到锁 → 排 500ms 重试
+  let written = false;
+  try { readState(dir); written = true; } catch {}
+  assert.ok(!written, '13: flush deferred while lock held');
+  rmSync(join(dir, '.failures.json.lock'));
+  await sleep(1200);  // 等待重试 timer 落盘
+  const s = readState(dir);
+  assert.strictEqual(Object.keys(s.entries).length, 1, '13: flushed after lock release');
+  assert.ok(Object.values(s.entries)[0].message.includes('lock contention'), '13: entry present');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 14：config.ignore 忽略名单（工具名 / 消息正则）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f14-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { ignore: ['^read', '故意|noise'] });
+  ctx.emit('tool/call', call('c-read', 'read'));
+  ctx.emit('tool/result', resultReal('c-read', 'ENOENT: no such file', true));   // 工具名被忽略
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'some 故意 noise here', true)); // 消息被忽略
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'real failure', true));        // 正常记录
+  await sleep(450);
+  const s = readState(dir);
+  assert.strictEqual(Object.keys(s.entries).length, 1, '14: ignored entries skipped');
+  assert.ok(Object.values(s.entries)[0].message.includes('real failure'), '14: real failure recorded');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (14 suites)');

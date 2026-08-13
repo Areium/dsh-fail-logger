@@ -2,7 +2,7 @@
 
 # dsh-fail-logger
 
-[![CI](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml/badge.svg)](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml)
+[![CI](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml/badge.svg)](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com/zh/) [![npm](https://img.shields.io/npm/v/dsh-fail-logger)](https://www.npmjs.com/package/dsh-fail-logger)
 
 全模式工具失败自动实录器：无论 DeepSeek Harness 跑在**原生模式**还是 **PTC（Code Mode）**，工具一旦失败，插件就把错因自动写进 skill 的机器维护区段（归一化去重、计数、确定性排序、TTL 裁剪、敏感信息脱敏），下次会话模型加载 skill 时直接看到高频错因——**错误越记越少**。
 
@@ -91,6 +91,12 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.1"
 - **非零退出码不记录**：见上文触发条件（这是 DSH 的语义，非插件缺陷）。
 - **去重是启发式**：按归一化后的前 1-3 行文本哈希；同根因不同文案可能分裂、不同根因同文案可能合并——可接受，请知悉。
 - **展示层保留原文**：路径/用户名的归一化只作用于去重键；消息展示保留原文（脱敏规则除外），若需更强隐私请按工作区自配 `config.redact`。
+
+## 社区
+
+- **npm**：[dsh-fail-logger](https://www.npmjs.com/package/dsh-fail-logger)（`dsh plugin --profile web add dsh-fail-logger`）
+- **GitHub topic**：[dsh-plugin](https://github.com/topics/dsh-plugin)（`deepseek-harness` / `dsh` / `skill` / `fail-logger`）
+- **收录清单**：[awesome-dsh-plugin](https://awesome-dsh-plugin.com/zh/) 精选列表
 
 ## 与社区同类插件的区别
 

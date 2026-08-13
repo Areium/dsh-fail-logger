@@ -2,7 +2,7 @@
 
 # dsh-fail-logger
 
-[![CI](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml/badge.svg)](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml)
+[![CI](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml/badge.svg)](https://github.com/Areium/dsh-fail-logger/actions/workflows/ci.yml) [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com/) [![npm](https://img.shields.io/npm/v/dsh-fail-logger)](https://www.npmjs.com/package/dsh-fail-logger)
 
 An all-mode tool failure recorder for DeepSeek Harness: whether the agent runs in **native mode** or **PTC (Code Mode)**, any tool failure is automatically written into the machine-maintained section of a skill — normalized-dedup, counted, deterministically ranked, TTL-pruned, and redacted — so the next session's model sees the most common failure causes when it loads the skill. **Fail less over time.**
 
@@ -91,6 +91,12 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 - **Non-zero exit codes are not recorded**: see the trigger conditions (DSH semantics, not a plugin bug).
 - **Dedup is heuristic**: keyed on the normalized first 1-3 lines of text; the same root cause with different wording may split, and different causes with identical wording may merge — acceptable, but be aware.
 - **Display keeps the original text**: path/username normalization affects the dedup key only; messages display the original (except redaction rules). For stricter privacy, configure `config.redact` per workspace.
+
+## Community
+
+- **npm**: [dsh-fail-logger](https://www.npmjs.com/package/dsh-fail-logger) (`dsh plugin --profile web add dsh-fail-logger`)
+- **GitHub topic**: [dsh-plugin](https://github.com/topics/dsh-plugin) (`deepseek-harness` / `dsh` / `skill` / `fail-logger`)
+- **Curated list**: [awesome-dsh-plugin](https://awesome-dsh-plugin.com/)
 
 ## How it differs from similar community plugins
 

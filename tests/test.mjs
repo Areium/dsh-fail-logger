@@ -21,7 +21,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 1：原生工具失败（call/result 关联 + 去重 + 非错误忽略）=====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f1-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -43,7 +43,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 2：run_code 失败解析官方 kind + unknown 兜底 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f2-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -64,7 +64,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 3：PTC 内嵌工具失败（tool/code-dispatch）+ 非错误忽略 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f3-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -81,7 +81,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 4：非工具事件忽略 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f4-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -103,7 +103,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const bads = ['not json', 'null', '[]', '{"entries": null}', '{"entries": {"a": {"count": "x"}}}'];
   for (const bad of bads) {
     const dir = mkdtempSync(join(tmpdir(), 'f5-'));
-    process.env.PTC_FAIL_LOG_DIR = dir;
+    process.env.FAIL_LOG_DIR = dir;
     writeFileSync(join(dir, 'SKILL.md'), SKILL);
     writeFileSync(join(dir, '.failures.json'), bad);
     const ctx = mkCtx();
@@ -119,34 +119,34 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 6：残缺标记自动归位 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f6-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   const mod = await import(MOD);
-  writeFileSync(join(dir, 'SKILL.md'), SKILL + '<!-- PTC-FAIL-LOG:BEGIN -->\n旧残段\n');
+  writeFileSync(join(dir, 'SKILL.md'), SKILL + '<!-- FAIL-LOG:BEGIN -->\n旧残段\n');
   let ctx = mkCtx();
   mod.apply(ctx, {});
   ctx.emit('tool/code-dispatch', dispatch('bash', 'dangling begin', true));
   await sleep(450);
   let skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
-  assert.strictEqual((skill.match(/PTC-FAIL-LOG:BEGIN/g) ?? []).length, 1, '6: begin recovered');
+  assert.strictEqual((skill.match(/FAIL-LOG:BEGIN/g) ?? []).length, 1, '6: begin recovered');
   assert.ok(!skill.includes('旧残段'), '6: stale fragment dropped');
-  writeFileSync(join(dir, 'SKILL.md'), SKILL + '<!-- PTC-FAIL-LOG:END -->\n');
+  writeFileSync(join(dir, 'SKILL.md'), SKILL + '<!-- FAIL-LOG:END -->\n');
   ctx = mkCtx();
   mod.apply(ctx, {});
   ctx.emit('tool/code-dispatch', dispatch('bash', 'dangling end', true));
   await sleep(450);
   skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
-  assert.strictEqual((skill.match(/PTC-FAIL-LOG:BEGIN/g) ?? []).length, 1, '6: end recovered');
+  assert.strictEqual((skill.match(/FAIL-LOG:BEGIN/g) ?? []).length, 1, '6: end recovered');
   rmSync(dir, { recursive: true, force: true });
 }
 
 // ===== 7：多区段折叠 + 其他文字保留 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f7-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), [
     '---','name: x','description: y','---','',
-    '头部','<!-- PTC-FAIL-LOG:BEGIN -->','A','<!-- PTC-FAIL-LOG:END -->',
-    '中间','<!-- PTC-FAIL-LOG:BEGIN -->','B','<!-- PTC-FAIL-LOG:END -->','尾部',''
+    '头部','<!-- FAIL-LOG:BEGIN -->','A','<!-- FAIL-LOG:END -->',
+    '中间','<!-- FAIL-LOG:BEGIN -->','B','<!-- FAIL-LOG:END -->','尾部',''
   ].join('\n'));
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -154,7 +154,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   ctx.emit('tool/code-dispatch', dispatch('bash', 'collapse', true));
   await sleep(450);
   const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
-  assert.strictEqual((skill.match(/PTC-FAIL-LOG:BEGIN/g) ?? []).length, 1, '7: single section');
+  assert.strictEqual((skill.match(/FAIL-LOG:BEGIN/g) ?? []).length, 1, '7: single section');
   assert.ok(skill.includes('头部') && skill.includes('中间') && skill.includes('尾部') && !skill.includes('\nA\n') && !skill.includes('\nB\n'), '7: text preserved, stale dropped');
   rmSync(dir, { recursive: true, force: true });
 }
@@ -162,7 +162,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 8：有界裁剪 + 空消息兜底 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f8-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -187,7 +187,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 9：dispose 立即 flush ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f9-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -202,7 +202,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 10：损坏状态先备份再重置 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f10-'));
-  process.env.PTC_FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), SKILL);
   writeFileSync(join(dir, '.failures.json'), '{broken json!!');
   const mod = await import(MOD);

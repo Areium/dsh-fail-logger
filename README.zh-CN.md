@@ -15,13 +15,13 @@
 ## 效果
 
 ```
-<!-- PTC-FAIL-LOG:BEGIN -->
+<!-- FAIL-LOG:BEGIN -->
 ## 自动实录（机器维护，勿手改；由 dsh-fail-logger 插件写入）
 
 - [exception] ReferenceError: require is not defined — ×3（最近 2026-08-14 02:00）
 - [tool] [bash] EPERM: operation not permitted, open '/Users/me/.dsh/x' — ×2（最近 2026-08-14 02:00）
 - [timeout] compute budget exhausted (60000ms busy) — ×1（最近 2026-08-14 02:00）
-<!-- PTC-FAIL-LOG:END -->
+<!-- FAIL-LOG:END -->
 ```
 
 | 会话中的失败（自动捕获） | skill 的自动实录区段 |
@@ -48,10 +48,10 @@ dsh plugin --profile web add "github:<你的用户名>/dsh-fail-logger"
     - id: dsh-fail-logger
       name: 'dsh-fail-logger'
       config:
-        logDir: /Users/me/.dsh/skills/ptc-code-run-guide  # 记录目标 skill 目录（默认配套 ptc-code-run-guide）
+        logDir: /Users/me/.dsh/skills/fail-log-guide  # 记录目标 skill 目录（默认配套 fail-log-guide）
         maxEntries: 10    # 实录区段最多行数
         maxMsg: 200       # 每条消息保留字符数
-        marker: PTC-FAIL-LOG  # 区段标记 id（[A-Za-z0-9-]）
+        marker: FAIL-LOG  # 区段标记 id（[A-Za-z0-9-]）
         flushMs: 300      # 失败风暴合并写防抖窗口
 ```
 

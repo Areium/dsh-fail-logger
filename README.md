@@ -15,13 +15,13 @@ The observation point is the **session log** (`session/event`) — the exact sam
 ## Effect
 
 ```
-<!-- PTC-FAIL-LOG:BEGIN -->
+<!-- FAIL-LOG:BEGIN -->
 ## 自动实录（机器维护，勿手改；由 dsh-fail-logger 插件写入）
 
 - [exception] ReferenceError: require is not defined — ×3（最近 2026-08-14 02:00）
 - [tool] [bash] EPERM: operation not permitted, open '/Users/me/.dsh/x' — ×2（最近 2026-08-14 02:00）
 - [timeout] compute budget exhausted (60000ms busy) — ×1（最近 2026-08-14 02:00）
-<!-- PTC-FAIL-LOG:END -->
+<!-- FAIL-LOG:END -->
 ```
 
 | Session failures (captured automatically) | Skill auto-log section |
@@ -48,10 +48,10 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
     - id: dsh-fail-logger
       name: 'dsh-fail-logger'
       config:
-        logDir: /Users/me/.dsh/skills/ptc-code-run-guide  # target skill dir (companion ptc-code-run-guide by default)
+        logDir: /Users/me/.dsh/skills/fail-log-guide  # target skill dir (companion fail-log-guide by default)
         maxEntries: 10    # max rows in the auto section
         maxMsg: 200       # chars kept per message
-        marker: PTC-FAIL-LOG  # section marker id ([A-Za-z0-9-])
+        marker: FAIL-LOG  # section marker id ([A-Za-z0-9-])
         flushMs: 300      # burst-coalescing debounce window
 ```
 

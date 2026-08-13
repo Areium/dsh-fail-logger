@@ -15,7 +15,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
   const dir = mkdtempSync(join(tmpdir(), 'ptc-1-'));
   process.env.PTC_FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), ['---','name: ptc-code-run-guide','description: t','---','','# 正文',''].join('\n'));
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   const rt = mkRuntime([fail('ReferenceError: require is not defined'), fail('ReferenceError: require is not defined'), fail('TypeError: res.stdout.slice is not a function'), {}, fail('ReferenceError: require is not defined')]);
   mod.apply(mkCtx(rt), {});
   for (let i = 0; i < 5; i++) await rt.run({});
@@ -37,7 +37,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
   const dir = mkdtempSync(join(tmpdir(), 'ptc-2-'));
   process.env.PTC_FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), '---\nname: x\ndescription: y\n---\n\nbody\n');
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   const rt = mkRuntime([fail('boom')]);
   mod.apply(mkCtx(rt), {});
   mod.apply(mkCtx(rt), {});   // 模拟 hot-reload 二次挂载
@@ -50,7 +50,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
 
 // ===== 用例 3：损坏/畸形状态文件不炸 =====
 {
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   const bads = ['not json', 'null', '[]', '{"entries": null}', '{"entries": {"a": {"count": "x"}}}'];
   for (const bad of bads) {
     const dir = mkdtempSync(join(tmpdir(), 'ptc-3-'));
@@ -71,7 +71,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
 {
   const dir = mkdtempSync(join(tmpdir(), 'ptc-4-'));
   process.env.PTC_FAIL_LOG_DIR = dir;
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   // 只有 BEGIN（尾部残段）
   writeFileSync(join(dir, 'SKILL.md'), '---\nname: x\ndescription: y\n---\n\nbody\n<!-- PTC-FAIL-LOG:BEGIN -->\n旧残段\n');
   let rt = mkRuntime([fail('dangling begin')]);
@@ -98,7 +98,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
   const dir = mkdtempSync(join(tmpdir(), 'ptc-5-'));
   process.env.PTC_FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), '---\nname: x\ndescription: y\n---\n\nbody\n');
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   let disposeCb = null;
   const rt = mkRuntime([fail('dispose flush')]);
   const ctx = { codeRuntime: rt, on: (ev, cb) => { if (ev === 'dispose') disposeCb = cb; } };
@@ -122,7 +122,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
     '<!-- PTC-FAIL-LOG:BEGIN -->','旧区段 B','<!-- PTC-FAIL-LOG:END -->',
     '尾部文字',''
   ].join('\n'));
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   const rt = mkRuntime([fail('collapse sections')]);
   mod.apply(mkCtx(rt), {});
   await rt.run({});
@@ -140,7 +140,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
   const dir = mkdtempSync(join(tmpdir(), 'ptc-7-'));
   process.env.PTC_FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), '---\nname: x\ndescription: y\n---\n\nbody\n');
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   const fail = (msg) => ({ error: { kind: 'exception', message: msg } });
   const q = [];
   q.push(fail('hot-a'), fail('hot-a'), fail('hot-a'));          // count 3
@@ -166,7 +166,7 @@ const mkRuntime = (queue) => ({ run: async () => queue.length ? queue.shift() : 
   process.env.PTC_FAIL_LOG_DIR = dir;
   writeFileSync(join(dir, 'SKILL.md'), '---\nname: x\ndescription: y\n---\n\nbody\n');
   writeFileSync(join(dir, '.failures.json'), '{broken json!!');
-  const mod = await import(new URL('./index.js', import.meta.url));
+  const mod = await import(new URL('../lib/index.js', import.meta.url));
   const rt = mkRuntime([fail('after corruption')]);
   mod.apply(mkCtx(rt), {});
   await rt.run({});

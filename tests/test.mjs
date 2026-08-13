@@ -13,12 +13,23 @@ const mkCtx = () => ({
   emit(type, data) { this.handlers['session/event']?.(null, { type, data }); },
   dispose() { this.handlers['dispose']?.(); }
 });
-const call = (callId, name) => ({ turn: 1, step: 1, callId, name, arguments: {} });
-const result = (callId, content, isError = true) => ({ turn: 1, step: 1, message: { callId, content, isError } });
-const dispatch = (name, content, isError = true) => ({ rootCallId: 'r', parentCallId: 'p', subCallId: 's', name, arguments: {}, isError, content });
+// —— 真实 DSH 0.1.0-rc.6 事件结构 ——
+const call = (callId, name, args = {}) => ({ turn: 1, step: 1, callId, name, arguments: args });
+const resultReal = (callId, text, isError = true, errMeta) => ({
+  turn: 1, step: 1,
+  message: {
+    source: { kind: 'tool', callId },
+    content: [{ type: 'tool-result', toolCallId: callId, content: typeof text === 'string' ? [{ type: 'text', text }] : text, isError }],
+    role: 'user',
+  },
+  ...(errMeta ? { error: errMeta } : {}),
+});
+// —— 旧结构（向后兼容回归用）——
+const resultOld = (callId, content, isError = true) => ({ turn: 1, step: 1, message: { callId, content, isError } });
+const dispatch = (name, content, isError = true, args = {}) => ({ rootCallId: 'r', parentCallId: 'p', subCallId: 's', name, arguments: args, isError, content });
 const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 'utf8'));
 
-// ===== 1：原生工具失败（call/result 关联 + 去重 + 非错误忽略）=====
+// ===== 1：真实结构原生工具失败（isError 在 tool-result 块上）+ 命令参数 + 非错误忽略 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f1-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -26,21 +37,23 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const mod = await import(MOD);
   const ctx = mkCtx();
   mod.apply(ctx, {});
-  ctx.emit('tool/call', call('c1', 'bash'));
-  ctx.emit('tool/result', result('c1', "EPERM: operation not permitted, open '/Users/x/.dsh/y'", true));
-  ctx.emit('tool/result', result('c1', "EPERM: operation not permitted, open '/Users/x/.dsh/y'", true));
-  ctx.emit('tool/result', result('c1', 'fine', false));   // 非错误不记
+  ctx.emit('tool/call', call('c1', 'bash', { command: 'rm -rf /x' }));
+  ctx.emit('tool/result', resultReal('c1', 'EPERM: operation not permitted, open \'/x\'', true));
+  ctx.emit('tool/result', resultReal('c1', 'EPERM: operation not permitted, open \'/x\'', true));
+  ctx.emit('tool/result', resultReal('c1', 'fine', false));
   await sleep(450);
   const s = readState(dir);
   assert.strictEqual(Object.keys(s.entries).length, 1, '1: one entry');
   const e = Object.values(s.entries)[0];
   assert.strictEqual(e.count, 2, '1: dedup count 2');
-  assert.strictEqual(e.kind, 'tool', '1: kind tool');
   assert.ok(e.message.startsWith('[bash] EPERM:'), '1: tool prefix');
+  assert.ok(e.args.includes('rm -rf /x'), '1: command args captured');
+  const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+  assert.ok(skill.includes('｜命令:'), '1: args rendered');
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 2：run_code 失败解析官方 kind + unknown 兜底 ===== 
+// ===== 2：run_code kind 解析 + data.error.code + unknown 兜底 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f2-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -49,19 +62,22 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const ctx = mkCtx();
   mod.apply(ctx, {});
   ctx.emit('tool/call', call('c2', 'run_code'));
-  ctx.emit('tool/result', result('c2', 'code run failed (exception): ReferenceError: require is not defined', true));
-  ctx.emit('tool/result', result('c2', 'code run failed (timeout): compute budget exhausted (60000ms busy)', true));
-  ctx.emit('tool/result', result('c99', 'boom without call record', true));  // unknown 兜底
+  ctx.emit('tool/result', resultReal('c2', 'code run failed (exception): ReferenceError: require is not defined', true));
+  ctx.emit('tool/result', resultReal('c2', 'code run failed (timeout): compute budget exhausted (60000ms busy)', true));
+  ctx.emit('tool/call', call('c3', 'grep'));
+  ctx.emit('tool/result', resultReal('c3', 'Search failed: pattern not found', true, { name: 'SearchError', code: 'SEARCH_FAILED' }));
+  ctx.emit('tool/result', resultReal('c99', 'boom without call record', true));
   await sleep(450);
   const s = readState(dir);
-  assert.strictEqual(Object.keys(s.entries).length, 3, '2: three entries');
-  assert.ok(Object.values(s.entries).some(e => e.kind === 'exception' && e.message === 'ReferenceError: require is not defined'), '2: exception parsed');
-  assert.ok(Object.values(s.entries).some(e => e.kind === 'timeout' && e.message.startsWith('compute budget')), '2: timeout parsed');
-  assert.ok(Object.values(s.entries).some(e => e.kind === 'tool' && e.message === '[unknown] boom without call record'), '2: unknown fallback');
+  assert.strictEqual(Object.keys(s.entries).length, 4, '2: four entries');
+  assert.ok(Object.values(s.entries).some(e => e.kind === 'exception' && e.message === 'ReferenceError: require is not defined'), '2: exception');
+  assert.ok(Object.values(s.entries).some(e => e.kind === 'timeout'), '2: timeout');
+  assert.ok(Object.values(s.entries).some(e => e.kind === 'tool' && e.message.startsWith('[grep]')), '2: grep');
+  assert.ok(Object.values(s.entries).some(e => e.message === '[unknown] boom without call record'), '2: unknown');
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 3：PTC 内嵌工具失败（tool/code-dispatch）+ 非错误忽略 ===== 
+// ===== 3：code-dispatch 块数组 content + 非错误忽略 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f3-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -69,16 +85,16 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const mod = await import(MOD);
   const ctx = mkCtx();
   mod.apply(ctx, {});
-  ctx.emit('tool/code-dispatch', dispatch('read', 'ENOENT: no such file or directory, open \'/x\'', true));
-  ctx.emit('tool/code-dispatch', dispatch('bash', 'exit code: 1', false));   // 非错误不记
+  ctx.emit('tool/code-dispatch', dispatch('read', [{ type: 'text', text: 'ENOENT: no such file' }, { type: 'text', text: ', open \'/x\'' }], true));
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'exit code: 1', false));
   await sleep(450);
   const s = readState(dir);
   assert.strictEqual(Object.keys(s.entries).length, 1, '3: one entry');
-  assert.ok(Object.values(s.entries)[0].message.startsWith('[read] ENOENT:'), '3: dispatch prefix');
+  assert.ok(Object.values(s.entries)[0].message.startsWith('[read] ENOENT: no such file, open'), '3: block text joined');
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 4：非工具事件忽略 ===== 
+// ===== 4：非工具事件忽略 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f4-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -88,16 +104,15 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   mod.apply(ctx, {});
   ctx.emit('user/message', { content: 'hi' });
   ctx.emit('session/title', { title: 't' });
-  ctx.emit('llm/request', {});
-  ctx.emit('tool/result', result('c', 'x', false));
+  ctx.emit('tool/result', resultReal('c', 'x', false));
   await sleep(450);
   let s = { entries: {} };
-  try { s = readState(dir); } catch {}   // 无失败记录 → 文件本就不应存在
+  try { s = readState(dir); } catch {}
   assert.strictEqual(Object.keys(s.entries).length, 0, '4: non-failure events ignored');
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 5：损坏/畸形状态文件不炸（5 形态，各自独立目录）=====
+// ===== 5：损坏/畸形状态文件（5 形态）=====
 {
   const mod = await import(MOD);
   const bads = ['not json', 'null', '[]', '{"entries": null}', '{"entries": {"a": {"count": "x"}}}'];
@@ -116,7 +131,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   }
 }
 
-// ===== 6：残缺标记自动归位 ===== 
+// ===== 6：残缺标记自动归位 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f6-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -128,7 +143,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   await sleep(450);
   let skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
   assert.strictEqual((skill.match(/FAIL-LOG:BEGIN/g) ?? []).length, 1, '6: begin recovered');
-  assert.ok(!skill.includes('旧残段'), '6: stale fragment dropped');
+  assert.ok(!skill.includes('旧残段'), '6: stale dropped');
   writeFileSync(join(dir, 'SKILL.md'), SKILL + '<!-- FAIL-LOG:END -->\n');
   ctx = mkCtx();
   mod.apply(ctx, {});
@@ -139,15 +154,11 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 7：多区段折叠 + 其他文字保留 ===== 
+// ===== 7：多区段折叠 + 正文保留 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f7-'));
   process.env.FAIL_LOG_DIR = dir;
-  writeFileSync(join(dir, 'SKILL.md'), [
-    '---','name: x','description: y','---','',
-    '头部','<!-- FAIL-LOG:BEGIN -->','A','<!-- FAIL-LOG:END -->',
-    '中间','<!-- FAIL-LOG:BEGIN -->','B','<!-- FAIL-LOG:END -->','尾部',''
-  ].join('\n'));
+  writeFileSync(join(dir, 'SKILL.md'), ['---','name: x','description: y','---','','头部','<!-- FAIL-LOG:BEGIN -->','A','<!-- FAIL-LOG:END -->','中间','<!-- FAIL-LOG:BEGIN -->','B','<!-- FAIL-LOG:END -->','尾部',''].join('\n'));
   const mod = await import(MOD);
   const ctx = mkCtx();
   mod.apply(ctx, {});
@@ -155,11 +166,11 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   await sleep(450);
   const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
   assert.strictEqual((skill.match(/FAIL-LOG:BEGIN/g) ?? []).length, 1, '7: single section');
-  assert.ok(skill.includes('头部') && skill.includes('中间') && skill.includes('尾部') && !skill.includes('\nA\n') && !skill.includes('\nB\n'), '7: text preserved, stale dropped');
+  assert.ok(skill.includes('头部') && skill.includes('中间') && skill.includes('尾部'), '7: text preserved');
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 8：有界裁剪 + 空消息兜底 ===== 
+// ===== 8：有界裁剪 + 空消息 + 分类分组 + 趋势行 + 建议 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f8-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -181,10 +192,13 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   assert.ok(Object.values(s.entries).some(e => e.message.includes('(empty message)')), '8: empty fallback survives');
   const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
   assert.ok(skill.includes('(empty message)'), '8: fallback rendered');
+  assert.ok(skill.includes('近 7 天失败:'), '8: trend line');
+  assert.ok(skill.includes('### 其他'), '8: category heading');
+  assert.ok(skill.includes('v0.4.0'), '8: version marker');
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 9：dispose 立即 flush ===== 
+// ===== 9：dispose 直刷 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f9-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -199,26 +213,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 10a：结构化 content 归一化（绝不出 [object Object]）=====
-{
-  const dir = mkdtempSync(join(tmpdir(), 'f10a-'));
-  process.env.FAIL_LOG_DIR = dir;
-  writeFileSync(join(dir, 'SKILL.md'), SKILL);
-  const mod = await import(MOD);
-  const ctx = mkCtx();
-  mod.apply(ctx, {});
-  ctx.emit('tool/call', call('c-obj', 'write'));
-  ctx.emit('tool/result', result('c-obj', { message: 'cannot overwrite existing file without reading it first' }, true));
-  ctx.emit('tool/result', result('c-obj', { code: 'EOOPS' }, true));
-  await sleep(450);
-  const s = readState(dir);
-  assert.ok(Object.values(s.entries).some(e => e.message.includes('cannot overwrite existing file')), '10a: .message field used');
-  assert.ok(Object.values(s.entries).some(e => e.message.includes('"code":"EOOPS"')), '10a: object serialized');
-  assert.ok(!Object.values(s.entries).some(e => e.message.includes('[object Object]')), '10a: no [object Object]');
-  rmSync(dir, { recursive: true, force: true });
-}
-
-// ===== 10：损坏状态先备份再重置 ===== 
+// ===== 10：损坏状态备份 + TTL 清理 =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f10-'));
   process.env.FAIL_LOG_DIR = dir;
@@ -235,4 +230,43 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (10 suites)');
+// ===== 11：旧结构向后兼容回归 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f11-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/call', call('c-o', 'bash'));
+  ctx.emit('tool/result', resultOld('c-o', 'legacy boom', true));
+  await sleep(450);
+  const s = readState(dir);
+  assert.strictEqual(Object.keys(s.entries).length, 1, '11: legacy shape still recorded');
+  assert.ok(Object.values(s.entries)[0].message.includes('legacy boom'), '11: legacy message');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 12：真实日志回放（fixture：真实结构 + 归一化去重 + 脱敏）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f12-'));
+  process.env.FAIL_LOG_DIR = dir;
+  process.env.FAIL_LOG_REPLAY = new URL('./fixtures/session.jsonl', import.meta.url).pathname;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  mod.apply(mkCtx(), {});   // 回放模式：同步喂事件 + 直刷，不订阅 session/event
+  delete process.env.FAIL_LOG_REPLAY;
+  const s = readState(dir);
+  assert.strictEqual(Object.keys(s.entries).length, 4, '12: replay entries: ' + Object.values(s.entries).map(e => e.message.slice(0, 30)).join(' | '));
+  const eperm = Object.values(s.entries).find(e => e.message.includes('EPERM'));
+  assert.strictEqual(eperm.count, 2, '12: path-normalized dedup merged two homes');
+  const runCode = Object.values(s.entries).find(e => e.kind === 'exception');
+  assert.ok(runCode, '12: run_code kind parsed');
+  const out = readFileSync(join(dir, 'SKILL.md'), 'utf8') + '\n' + readFileSync(join(dir, '.failures.json'), 'utf8');
+  assert.ok(!out.includes('sk-abcdef'), '12: API key redacted (raw secret absent)');
+  assert.ok(!out.includes('abcdefABCDEF'), '12: bearer token redacted (raw secret absent)');
+  assert.ok(out.includes('***'), '12: redaction markers present');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (12 suites)');

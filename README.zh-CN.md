@@ -1,3 +1,5 @@
+[English](README.md) | 中文
+
 # dsh-fail-logger
 
 全模式工具失败自动实录器：无论 DeepSeek Harness 跑在**原生模式**还是 **PTC（Code Mode）**，工具一旦失败，插件就把错因自动写进 skill 的机器维护区段（按错因去重、计数、确定性排序、有界裁剪），下次会话模型加载 skill 时直接看到高频错因——**错误越记越少**。
@@ -33,7 +35,7 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add "github:<你的用户名>/dsh-fail-logger"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger"
 # 或已发布 npm 后：
 # dsh plugin --profile web add dsh-fail-logger
 # 或手动挂载：把 cordis.patch.yml 的 insert 条目加进 ~/.dsh/profiles/web/cordis.patch.yml

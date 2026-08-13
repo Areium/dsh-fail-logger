@@ -1,3 +1,5 @@
+[中文](README.zh-CN.md) | English
+
 # dsh-fail-logger
 
 A failure recorder for every execution mode in DeepSeek Harness: whether the agent runs in **native mode** or **PTC (Code Mode)**, any tool failure is automatically written into the machine-maintained section of a skill — deduplicated, counted, deterministically ranked, and bounded — so the next session's model sees the most common failure causes when it loads the skill. **Fail less over time.**
@@ -33,7 +35,7 @@ The observation point is the **session log** (`session/event`) — the exact sam
 ## Install
 
 ```sh
-dsh plugin --profile web add "github:<your-user>/dsh-fail-logger"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger"
 # or once published on npm:
 # dsh plugin --profile web add dsh-fail-logger
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml

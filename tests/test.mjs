@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import assert from 'node:assert';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const MOD = new URL('./lib/index.js', import.meta.url);
+const MOD = new URL('../lib/index.js', import.meta.url);
 const SKILL = '---\nname: x\ndescription: y\n---\n\nbody\n';
 
 const mkCtx = () => ({

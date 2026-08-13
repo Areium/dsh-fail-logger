@@ -195,7 +195,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   assert.ok(skill.includes('(empty message)'), '8: fallback rendered');
   assert.ok(skill.includes('近 7 天失败:'), '8: trend line');
   assert.ok(skill.includes('### 其他'), '8: category heading');
-  assert.ok(skill.includes('v0.4.0'), '8: version marker');
+  assert.ok(skill.includes('v' + mod.VERSION), '8: version marker');
   rmSync(dir, { recursive: true, force: true });
 }
 

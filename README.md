@@ -58,3 +58,10 @@ npm test        # unit tests: dedup/counts/section render/idempotence/custom con
 ## License
 
 MIT
+
+## Known limitations
+
+- **Cross-process counts are best-effort**: with both web and headless profiles mounted, each holds its own in-memory counts. Flushes are atomic (tmp + rename, never corrupting files), but one process may occasionally overwrite a single increment — causes are never lost, only exact counts.
+- **Corrupt state is backed up**: an unparseable `.failures.json` is renamed to `.failures.json.bak-<timestamp>` before reset, so old data stays recoverable.
+- **Wraps the runtime instance present at apply time**: if another plugin replaces the whole `codeRuntime` service afterwards, this wrapper is bypassed (ordering-dependent).
+

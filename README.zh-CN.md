@@ -43,9 +43,15 @@
 ## 安装
 
 ```sh
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.1"  # 建议固定到 release tag，便于审计与回滚
-# 或已发布 npm 后：
-# dsh plugin --profile web add dsh-fail-logger
+# npm（推荐）
+dsh plugin --profile web add dsh-fail-logger
+
+# 或固定到具体版本
+dsh plugin --profile web add dsh-fail-logger@0.4.1
+
+# 或 GitHub release tag（不依赖 npm registry，便于审计与回滚）
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.1"
+
 # 或手动挂载：把 cordis.patch.yml 的 insert 条目加进 ~/.dsh/profiles/web/cordis.patch.yml
 ```
 

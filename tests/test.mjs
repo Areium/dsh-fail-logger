@@ -199,6 +199,25 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
+// ===== 10a：结构化 content 归一化（绝不出 [object Object]）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f10a-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/call', call('c-obj', 'write'));
+  ctx.emit('tool/result', result('c-obj', { message: 'cannot overwrite existing file without reading it first' }, true));
+  ctx.emit('tool/result', result('c-obj', { code: 'EOOPS' }, true));
+  await sleep(450);
+  const s = readState(dir);
+  assert.ok(Object.values(s.entries).some(e => e.message.includes('cannot overwrite existing file')), '10a: .message field used');
+  assert.ok(Object.values(s.entries).some(e => e.message.includes('"code":"EOOPS"')), '10a: object serialized');
+  assert.ok(!Object.values(s.entries).some(e => e.message.includes('[object Object]')), '10a: no [object Object]');
+  rmSync(dir, { recursive: true, force: true });
+}
+
 // ===== 10：损坏状态先备份再重置 ===== 
 {
   const dir = mkdtempSync(join(tmpdir(), 'f10-'));

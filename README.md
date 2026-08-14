@@ -76,6 +76,7 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 
 ## How it works
 
+- **Always-on instructions (push)**: injects the three iron rules as a system-prompt section on every agent step (`injectInstructions: false` to disable) — prevents execution-time mistakes without AGENTS.md or skill loading;
 - Listens to `session/event`, consuming three event kinds: `tool/call` (callId→{tool name, args} map), `tool/result` (parses the real rc.6 shape: `message.content[].type === 'tool-result'` block's `isError`/`toolCallId`; legacy shape still supported), `tool/code-dispatch` (recorded only when isError). A one-time visible warning fires on unexpected shapes.
 - **Normalized dedup**: paths (quoted / drive-letter / absolute → `<path>`) and long numbers (→ `<n>`) are normalized before the SHA1 key — the same EPERM on `/Users/a/x` and `/Users/b/y` merges into one entry; `data.error.code` (e.g. `SEARCH_FAILED`) joins the key when present.
 - **Redaction & sanitization**: defaults cover `sk-…` keys, `Bearer`/`Basic` auth, `-u user:pass` and inline URL credentials, `api_key/token/secret/password=` assignments, credential file paths, and private IPs; extend via `config.redact`. Control chars stripped, markdown pipes/backticks escaped (anti inline injection).

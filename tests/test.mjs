@@ -405,4 +405,23 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (18 suites)');
+// ===== 19：常驻指令注入（systemPrompt.section）+ 开关 =====";
+{
+  const mod = await import(MOD);
+  assert.ok(Array.isArray(mod.inject) && mod.inject.includes('systemPrompt'), '19: inject declares systemPrompt');
+  // 开（默认）
+  let sections = [];
+  const ctxOn = { on: () => {} };
+  const ctx1 = { on: () => {}, systemPrompt: { section: (s) => sections.push(s) }, effect: (fn) => { fn(); return () => {}; } };
+  mod.apply(ctx1, {});
+  assert.strictEqual(sections.length, 1, '19: section registered by default');
+  assert.strictEqual(sections[0].name, 'fail-logger:iron-rules', '19: section name');
+  assert.ok(sections[0].text.includes('写操作铁律') && sections[0].text.includes('fail-log-guide'), '19: prompt text present');
+  // 关
+  sections = [];
+  const ctx2 = { on: () => {}, systemPrompt: { section: (s) => sections.push(s) }, effect: (fn) => { fn(); return () => {}; } };
+  mod.apply(ctx2, { injectInstructions: false });
+  assert.strictEqual(sections.length, 0, '19: disabled via config');
+}
+
+console.log('ALL TESTS PASS ✅ (19 suites)');

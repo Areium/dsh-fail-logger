@@ -76,6 +76,7 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.0"
 
 ## 工作原理
 
+- **常驻指令（push）**：把三项写操作铁律作为系统提示段注入每个 agent step（`injectInstructions: false` 可关）——防执行期错误，不依赖 AGENTS.md 或 skill 加载；
 - 监听 `session/event`，消费三类事件：`tool/call`（建立 callId→{工具名,参数} 映射）、`tool/result`（解析真实 rc.6 结构：`message.content[].type === 'tool-result'` 块上的 `isError`/`toolCallId`，兼容旧结构）、`tool/code-dispatch`（isError 才记录）；结构不匹配时打一次可见警告；
 - **归一化去重**：路径（引号内/盘符/绝对路径 → `<path>`）与长数字（→ `<n>`）先归一化再参与 SHA1 键——`/Users/a/x` 与 `/Users/b/y` 的同类 EPERM 合并为一条；`data.error.code`（如 `SEARCH_FAILED`）存在时并入键；
 - **脱敏与消毒**：默认规则覆盖 `sk-…` key、`Bearer`/`Basic` 认证、`-u user:pass` 与 URL 内嵌凭据、`api_key/token/secret/password=` 赋值、凭证文件路径、私网 IP，可经 `config.redact` 追加；控制字符剥离、Markdown 竖线/反引号转义（防内联注入）；

@@ -47,10 +47,10 @@ The observation point is the **session log** (`session/event`) — the exact sam
 dsh plugin --profile web add dsh-fail-logger
 
 # or pin to an exact version
-dsh plugin --profile web add dsh-fail-logger@0.5.0
+dsh plugin --profile web add dsh-fail-logger@0.5.1
 
 # or GitHub release tag (no npm registry dependency; auditability & rollback)
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.0"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.1"
 
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
 ```
@@ -76,10 +76,10 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 
 ## How it works
 
-- **Always-on instructions (push)**: injects the three iron rules as a system-prompt section on every agent step (`injectInstructions: false` to disable) — prevents execution-time mistakes without AGENTS.md or skill loading;
+- **Always-on instructions (push)**: injects the three iron rules as a system-prompt section on every agent step (~90 chars/step, `injectInstructions: false` to disable) — prevents execution-time mistakes without AGENTS.md or skill loading;
 - Listens to `session/event`, consuming three event kinds: `tool/call` (callId→{tool name, args} map), `tool/result` (parses the real rc.6 shape: `message.content[].type === 'tool-result'` block's `isError`/`toolCallId`; legacy shape still supported), `tool/code-dispatch` (recorded only when isError). A one-time visible warning fires on unexpected shapes.
 - **Normalized dedup**: paths (quoted / drive-letter / absolute → `<path>`) and long numbers (→ `<n>`) are normalized before the SHA1 key — the same EPERM on `/Users/a/x` and `/Users/b/y` merges into one entry; `data.error.code` (e.g. `SEARCH_FAILED`) joins the key when present.
-- **Redaction & sanitization**: defaults cover `sk-…` keys, `Bearer`/`Basic` auth, `-u user:pass` and inline URL credentials, `api_key/token/secret/password=` assignments, credential file paths, and private IPs; extend via `config.redact`. Control chars stripped, markdown pipes/backticks escaped (anti inline injection).
+- **Redaction & sanitization**: defaults cover `sk-…` keys, `Bearer`/`Basic` auth, `-u user:pass` and inline URL credentials, `api_key/token/secret/password=` assignments, credential file paths, and private IPs; extend via `config.redact`. Control chars stripped, markdown pipes/backticks escaped, **instruction-injection defense** (system-reminder-style tags and common imperative phrases stripped + angle-bracket entity escaping) and a section-level data-boundary declaration (the log is data, never instructions).
 - **Cross-process lock-merge**: flush takes an exclusive lock (`wx`, stale >5s recycled) and re-reads + merges the on-disk state before writing — web/headless concurrency no longer loses increments; failed writes keep dirty and retry after 2s.
 - **Trend & TTL**: per-day counters render a "last 7 days" trend line; entries with no new occurrence for `ttlDays` are archived.
 - **Categorized rendering**: grouped under filesystem / permissions & sandbox / timeout & budget / network & remote / other, with rule-based 💡 suggestions; deterministic total-order ranking (count↓ → last↓ → first↓ → hash↑); state pruned beyond `maxEntries×5`.

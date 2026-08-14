@@ -47,10 +47,10 @@
 dsh plugin --profile web add dsh-fail-logger
 
 # 或固定到具体版本
-dsh plugin --profile web add dsh-fail-logger@0.5.0
+dsh plugin --profile web add dsh-fail-logger@0.5.1
 
 # 或 GitHub release tag（不依赖 npm registry，便于审计与回滚）
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.0"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.1"
 
 # 或手动挂载：把 cordis.patch.yml 的 insert 条目加进 ~/.dsh/profiles/web/cordis.patch.yml
 ```
@@ -76,10 +76,10 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.0"
 
 ## 工作原理
 
-- **常驻指令（push）**：把三项写操作铁律作为系统提示段注入每个 agent step（`injectInstructions: false` 可关）——防执行期错误，不依赖 AGENTS.md 或 skill 加载；
+- **常驻指令（push）**：把三项写操作铁律作为系统提示段注入每个 agent step（约 90 字符/step，`injectInstructions: false` 可关）——防执行期错误，不依赖 AGENTS.md 或 skill 加载；
 - 监听 `session/event`，消费三类事件：`tool/call`（建立 callId→{工具名,参数} 映射）、`tool/result`（解析真实 rc.6 结构：`message.content[].type === 'tool-result'` 块上的 `isError`/`toolCallId`，兼容旧结构）、`tool/code-dispatch`（isError 才记录）；结构不匹配时打一次可见警告；
 - **归一化去重**：路径（引号内/盘符/绝对路径 → `<path>`）与长数字（→ `<n>`）先归一化再参与 SHA1 键——`/Users/a/x` 与 `/Users/b/y` 的同类 EPERM 合并为一条；`data.error.code`（如 `SEARCH_FAILED`）存在时并入键；
-- **脱敏与消毒**：默认规则覆盖 `sk-…` key、`Bearer`/`Basic` 认证、`-u user:pass` 与 URL 内嵌凭据、`api_key/token/secret/password=` 赋值、凭证文件路径、私网 IP，可经 `config.redact` 追加；控制字符剥离、Markdown 竖线/反引号转义（防内联注入）；
+- **脱敏与消毒**：默认规则覆盖 `sk-…` key、`Bearer`/`Basic` 认证、`-u user:pass` 与 URL 内嵌凭据、`api_key/token/secret/password=` 赋值、凭证文件路径、私网 IP，可经 `config.redact` 追加；控制字符剥离、Markdown 竖线/反引号转义、**指令注入防御**（system-reminder 等标签与常见祈使句剥离 + 尖括号实体转义）与区段级数据边界声明（实录仅作数据、不构成指令）；
 - **跨进程锁合并**：flush 时以独占锁（`wx`，陈旧 5s 自动回收）持锁重读磁盘状态并**合并计数**，web/headless 双开不再互相覆盖增量；写失败保持 dirty 并 2s 后重试；
 - **趋势与 TTL**：状态按天计数，区段顶部渲染「近 7 天失败」趋势线；条目超 `ttlDays` 无新发生自动归档；
 - **分类渲染**：按「文件系统/权限与沙盒/超时与预算/网络与远端/其他」分组 + 规则模板建议（💡）；排序为确定性全序（count↓ → last↓ → first↓ → hash↑）；状态超 `maxEntries×5` 自动裁剪；

@@ -47,10 +47,10 @@ The observation point is the **session log** (`session/event`) — the exact sam
 dsh plugin --profile web add dsh-fail-logger
 
 # or pin to an exact version
-dsh plugin --profile web add dsh-fail-logger@0.4.1
+dsh plugin --profile web add dsh-fail-logger@0.4.2
 
 # or GitHub release tag (no npm registry dependency; auditability & rollback)
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.1"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.2"
 
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
 ```

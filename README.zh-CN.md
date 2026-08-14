@@ -47,10 +47,10 @@
 dsh plugin --profile web add dsh-fail-logger
 
 # 或固定到具体版本
-dsh plugin --profile web add dsh-fail-logger@0.4.1
+dsh plugin --profile web add dsh-fail-logger@0.4.2
 
 # 或 GitHub release tag（不依赖 npm registry，便于审计与回滚）
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.1"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.2"
 
 # 或手动挂载：把 cordis.patch.yml 的 insert 条目加进 ~/.dsh/profiles/web/cordis.patch.yml
 ```

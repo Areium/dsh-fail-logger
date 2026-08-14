@@ -11,7 +11,7 @@ const SKILL = '---\nname: x\ndescription: y\n---\n\nbody\n';
 const mkCtx = () => ({
   handlers: {},
   on(ev, cb) { this.handlers[ev] = cb; },
-  emit(type, data) { this.handlers['session/event']?.(null, { type, data }); },
+  emit(type, data, time) { this.handlers['session/event']?.(null, { type, data, ...(time !== undefined ? { time } : {}) }); },
   dispose() { this.handlers['dispose']?.(); }
 });
 // —— 真实 DSH 0.1.0-rc.6 事件结构 ——
@@ -311,4 +311,49 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (14 suites)');
+// ===== 15：多次 flush 不翻倍（Bug 1 回归：纯增量账本语义）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f15-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { flushMs: 150 });
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'inflate check', true));
+  await sleep(400);
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'inflate check', true));
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'inflate check', true));
+  await sleep(400);
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'inflate check', true));
+  await sleep(400);
+  ctx.dispose();
+  const s = readState(dir);
+  const e = Object.values(s.entries)[0];
+  assert.strictEqual(e.count, 4, '15: count equals real failures (no exponential inflation)');
+  const dayTotal = Object.values(s.days).reduce((a, b) => a + b, 0);
+  assert.strictEqual(dayTotal, 4, '15: days total equals real failures');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 16：first/last 用事件时刻；非法时间戳回退当前时刻 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f16-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  const t1 = 1786579200000;
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'ts honored', true), t1);
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'ts invalid fallback', true), 5);
+  await sleep(450);
+  const s = readState(dir);
+  const honored = Object.values(s.entries).find(e => e.message.includes('ts honored'));
+  assert.strictEqual(honored.last, new Date(t1).toISOString(), '16: event time honored');
+  assert.strictEqual(honored.first, new Date(t1).toISOString(), '16: first equals event time');
+  const fallback = Object.values(s.entries).find(e => e.message.includes('ts invalid fallback'));
+  assert.ok(fallback.last.startsWith('20'), '16: bogus timestamp falls back to now (not 1970)');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (16 suites)');

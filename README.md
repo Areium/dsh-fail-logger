@@ -120,12 +120,24 @@ npm test        # 14 suites: real event-shape parsing/legacy compat/normalized d
 
 **Real-log replay** (against fake-green tests): `FAIL_LOG_REPLAY=<session.jsonl> npm test` feeds real session events into the same handler. Session logs live at `~/.dsh/sessions/**/session.jsonl` (run `zstd -d` first if compressed). `tests/fixtures/session.jsonl` is a real-shape fixture run by CI on every push.
 
-**Post-install smoke test**:
+**Post-install smoke test (2 commands)**:
+
+Prerequisites: the target profile has the plugin installed and has been restarted (web or headless; headless shown below).
 
 ```sh
-dsh --profile headless "use the read tool on a file that does not exist"   # trigger a guaranteed failure
-tail -20 ~/.dsh/skills/fail-log-guide/SKILL.md                              # FAIL-LOG section with the cause should appear
+# 1) trigger a guaranteed failure (read on a missing file → isError=true)
+dsh --profile headless "use the read tool on a file that does not exist"
+
+# 2) verify the record landed
+tail -20 ~/.dsh/skills/fail-log-guide/SKILL.md
 ```
+
+```powershell
+# Windows PowerShell variant of step 2
+Get-Content "$env:USERPROFILE\.dsh\skills\fail-log-guide\SKILL.md" -Tail 20
+```
+
+Expected: a `FAIL-LOG` section with a `[read] ENOENT…` cause. If missing, check in order: ① startup log `[dsh-fail-logger] v0.4.2 active`; ② logDir writability warning; ③ whether that profile was restarted after install.
 
 ## License
 

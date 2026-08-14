@@ -120,12 +120,24 @@ npm test        # 14 组单测：真实事件结构解析/旧结构兼容/归一
 
 **真实日志回放**（对抗"假绿"）：`FAIL_LOG_REPLAY=<session.jsonl> npm test` 或直接把真实会话日志喂给插件回放入口。会话日志位置 `~/.dsh/sessions/**/session.jsonl`（若为 zstd 压缩先 `zstd -d` 解压）。仓库内 `tests/fixtures/session.jsonl` 即一份真实结构夹具，CI 每次运行。
 
-**装好后手动冒烟**：
+**装好后手动冒烟（2 条命令）**：
+
+前提：目标 profile 已安装本插件并重启过（web / headless 均可，以下以 headless 为例）。
 
 ```sh
-dsh --profile headless "用 read 工具读取一个不存在的文件"   # 触发一次必然失败
-cat ~/.dsh/skills/fail-log-guide/SKILL.md | tail -20        # 应出现 FAIL-LOG 区段与错因
+# 1) 触发一次必然失败（read 不存在的文件 → isError=true）
+dsh --profile headless "用 read 工具读取一个不存在的文件"
+
+# 2) 验证实录已落盘
+tail -20 ~/.dsh/skills/fail-log-guide/SKILL.md
 ```
+
+```powershell
+# Windows PowerShell 版第 2 步
+Get-Content "$env:USERPROFILE\.dsh\skills\fail-log-guide\SKILL.md" -Tail 20
+```
+
+预期：出现 `FAIL-LOG` 区段与 `[read] ENOENT…` 错因。未出现时按顺序排查：① 启动日志是否有 `[dsh-fail-logger] v0.4.2 active`；② logDir 可写性警告；③ 该 profile 是否在安装后重启过。
 
 ## License
 

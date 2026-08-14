@@ -386,4 +386,23 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (17 suites)');
+// ===== 18：SKILL.md 缺失时自动播种完整正文（含可路由 description）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f18-'));
+  process.env.FAIL_LOG_DIR = dir;
+  // 不创建 SKILL.md —— 验证 ensureSkillFile 自动播种
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'seed check', true));
+  await sleep(450);
+  const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+  assert.ok(skill.startsWith('---\nname: fail-log-guide\ndescription: 工具失败自动实录'), '18: routable frontmatter seeded');
+  assert.ok(skill.includes('# DSH 工具失败自纠指南'), '18: seed body title');
+  assert.ok(skill.includes('## 一、写操作前三项铁律'), '18: seed body sections');
+  assert.ok(skill.includes('FAIL-LOG:BEGIN'), '18: auto-log section appended');
+  assert.ok(skill.includes('[bash] seed check'), '18: failure recorded');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (18 suites)');

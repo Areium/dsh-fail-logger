@@ -1,6 +1,6 @@
 {
   "name": "dsh-fail-logger",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "type": "module",
   "description": "DSH 插件：全模式工具失败自动实录——把原生工具、PTC(Code Mode) run_code、代码内嵌工具调用的失败按错因去重计数，自动写入 skill 的机器维护区段，越用越少错。Auto-record tool failures from every execution mode into a skill's machine-maintained section (dedup + counts).",
   "main": "lib/index.js",

@@ -47,10 +47,10 @@
 dsh plugin --profile web add dsh-fail-logger
 
 # 或固定到具体版本
-dsh plugin --profile web add dsh-fail-logger@0.4.3
+dsh plugin --profile web add dsh-fail-logger@0.4.4
 
 # 或 GitHub release tag（不依赖 npm registry，便于审计与回滚）
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.3"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.4"
 
 # 或手动挂载：把 cordis.patch.yml 的 insert 条目加进 ~/.dsh/profiles/web/cordis.patch.yml
 ```
@@ -91,6 +91,17 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.3"
 - **非零退出码不记录**：见上文触发条件（这是 DSH 的语义，非插件缺陷）。
 - **去重是启发式**：按归一化后的前 1-3 行文本哈希；同根因不同文案可能分裂、不同根因同文案可能合并——可接受，请知悉。
 - **展示层保留原文**：路径/用户名的归一化只作用于去重键；消息展示保留原文（脱敏规则除外），若需更强隐私请按工作区自配 `config.redact`。
+
+## 让模型主动加载 fail-log-guide（skill 路由）
+
+DSH 只向模型暴露 skill 的 `name` 与 `description`（不包含正文），模型据此**自主判断**是否调用 `skill({name})` 加载完整内容——所以 description 的「何时用」措辞直接决定加载率。
+
+插件生成/建议的 SKILL.md 使用可路由描述（"工具调用失败、报错、重试受阻时加载…"），实测能使模型在**失败分析 / 对照历史 / 避免建议**场景主动加载实录。
+
+- **手动调整**：编辑 `~/.dsh/skills/fail-log-guide/SKILL.md` 的 frontmatter `description` 即可（插件只维护 `FAIL-LOG` 区段，不会覆盖 frontmatter）。
+- **实测边界**：简单单轮任务（即使会失败）模型通常不加载（判断为"无需外部指导"）；任务含"分析失败 / 对照历史 / 避免建议"或点名插件时可靠加载。
+
+> 存量 SKILL.md 不会因升级自动改写 frontmatter——如需生效，手动改一行 description 即可。
 
 ## 社区
 

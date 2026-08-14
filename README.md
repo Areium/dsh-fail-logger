@@ -47,10 +47,10 @@ The observation point is the **session log** (`session/event`) — the exact sam
 dsh plugin --profile web add dsh-fail-logger
 
 # or pin to an exact version
-dsh plugin --profile web add dsh-fail-logger@0.4.3
+dsh plugin --profile web add dsh-fail-logger@0.4.4
 
 # or GitHub release tag (no npm registry dependency; auditability & rollback)
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.3"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.4"
 
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
 ```
@@ -91,6 +91,17 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 - **Non-zero exit codes are not recorded**: see the trigger conditions (DSH semantics, not a plugin bug).
 - **Dedup is heuristic**: keyed on the normalized first 1-3 lines of text; the same root cause with different wording may split, and different causes with identical wording may merge — acceptable, but be aware.
 - **Display keeps the original text**: path/username normalization affects the dedup key only; messages display the original (except redaction rules). For stricter privacy, configure `config.redact` per workspace.
+
+## Make the model actually load fail-log-guide (skill routing)
+
+DSH only exposes each skill's `name` and `description` to the model (not the body), and the model decides on its own whether to call `skill({name})` — so the "when to use" phrasing of the description directly determines load rate.
+
+The SKILL.md generated/recommended by this plugin uses a routable description ("load when a tool call fails, errors, or retries are blocked…"), verified to make the model load the log in **failure-analysis / compare-history / avoid-advice** scenarios.
+
+- **Manual tuning**: edit the frontmatter `description` of `~/.dsh/skills/fail-log-guide/SKILL.md` (the plugin only maintains the `FAIL-LOG` section, never the frontmatter).
+- **Measured boundary**: a simple single-turn task (even one that will fail) usually does NOT load the skill (the model sees no need for external guidance); tasks mentioning "analyze the failure / compare history / avoid advice" or naming the plugin load reliably.
+
+> Existing SKILL.md files are not auto-rewritten on upgrade — change the one description line manually if you want the new wording.
 
 ## Community
 

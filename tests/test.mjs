@@ -402,6 +402,10 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   assert.ok(skill.includes('## 一、写操作前三项铁律'), '18: seed body sections');
   assert.ok(skill.includes('FAIL-LOG:BEGIN'), '18: auto-log section appended');
   assert.ok(skill.includes('[bash] seed check'), '18: failure recorded');
+  // 防自伤守卫：种子正文自身必须单一标题、且不含会被写入管道吞掉的字符序列
+  const seedText = readFileSync(new URL('../lib/seed-body.md', import.meta.url), 'utf8');
+  assert.strictEqual((seedText.match(/# DSH 工具失败自纠指南/g) ?? []).length, 1, '18: seed body single title (no corruption)');
+  assert.ok(!seedText.includes(String.fromCharCode(36)), '18: seed body contains no dollar char (write-pipeline safety)');
   rmSync(dir, { recursive: true, force: true });
 }
 

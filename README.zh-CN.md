@@ -104,6 +104,18 @@ DSH 只向模型暴露 skill 的 `name` 与 `description`（不包含正文）�
 
 > 存量 SKILL.md 不会因升级自动改写 frontmatter——如需生效，手动改一行 description 即可。
 
+## 成本说明（常驻指令，可选）
+
+push 式预防的常驻指令会注入每个 agent step，成本与开关如下：
+
+| 项 | 数值 |
+|---|---|
+| 注入文本 | ~90 字符 ≈ ~100 tokens/step（固定前缀，缓存命中后实付约 10-25/step） |
+| 关闭方式 | \`config.injectInstructions: false\` |
+| 回本点 | 22-55 步内避免 1 次失败即回本（一次失败往返实测 ~1600 tokens + 10-60 秒） |
+
+追求零额外成本时关闭注入即可，仍保留 pull 式能力（可路由 skill 加载 + 失败实录）。也可以按会话/agent 作用域注入（DSH 支持作用域贡献，本插件默认全局）。
+
 ## 社区
 
 - **npm**：[dsh-fail-logger](https://www.npmjs.com/package/dsh-fail-logger)（`dsh plugin --profile web add dsh-fail-logger`）

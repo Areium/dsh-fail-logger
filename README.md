@@ -104,6 +104,18 @@ The SKILL.md generated/recommended by this plugin uses a routable description ("
 
 > Existing SKILL.md files are not auto-rewritten on upgrade — change the one description line manually if you want the new wording.
 
+## Cost note (always-on instruction, optional)
+
+The push-prevention instruction is injected on every agent step:
+
+| Item | Value |
+|---|---|
+| Injected text | ~90 chars ≈ ~100 tokens/step (fixed prefix; ~10-25/step after cache hits) |
+| Disable | \`config.injectInstructions: false\` |
+| Break-even | avoiding 1 failure within 22-55 steps pays for it (one failure round-trip measured ~1600 tokens + 10-60s) |
+
+Turn the injection off for zero extra cost — pull-style capability (routable skill loading + failure log) remains. Scoped injection is also possible via DSH scopes; the plugin contributes globally by default.
+
 ## Community
 
 - **npm**: [dsh-fail-logger](https://www.npmjs.com/package/dsh-fail-logger) (`dsh plugin --profile web add dsh-fail-logger`)

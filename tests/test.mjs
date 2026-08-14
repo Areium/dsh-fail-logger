@@ -356,4 +356,34 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (16 suites)');
+// ===== 17：跨会话不翻倍（Bug 回归：内存账本绝不从磁盘播种）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f17-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  // 模拟两次独立进程（两个 apply = 两个内存账本，共享同一 logDir）
+  const s1 = mkCtx();
+  mod.apply(s1, { flushMs: 150 });
+  s1.emit('tool/code-dispatch', dispatch('bash', 'cross-session', true));
+  await sleep(400);
+  s1.dispose();
+  const s2 = mkCtx();
+  mod.apply(s2, { flushMs: 150 });
+  s2.emit('tool/code-dispatch', dispatch('bash', 'cross-session', true));
+  await sleep(400);
+  s2.dispose();
+  const s3 = mkCtx();
+  mod.apply(s3, { flushMs: 150 });
+  s3.emit('tool/code-dispatch', dispatch('bash', 'cross-session', true));
+  await sleep(400);
+  s3.dispose();
+  const s = readState(dir);
+  const e = Object.values(s.entries)[0];
+  assert.strictEqual(e.count, 3, '17: three sessions → count 3 (no 2^(n+1)-1 inflation)');
+  const dayTotal = Object.values(s.days).reduce((a, b) => a + b, 0);
+  assert.strictEqual(dayTotal, 3, '17: days total 3');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (17 suites)');

@@ -1,6 +1,6 @@
 {
   "id": "dsh-fail-logger",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "main": "./lib/index.js",
   "description": "Auto-record tool failures from every execution mode (native tools, PTC run_code, nested tool calls) into a skill's machine-maintained section (dedup + counts)",
   "engines": {

@@ -47,10 +47,10 @@ The observation point is the **session log** (`session/event`) — the exact sam
 dsh plugin --profile web add dsh-fail-logger
 
 # or pin to an exact version
-dsh plugin --profile web add dsh-fail-logger@0.4.2
+dsh plugin --profile web add dsh-fail-logger@0.4.3
 
 # or GitHub release tag (no npm registry dependency; auditability & rollback)
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.2"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.4.3"
 
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
 ```
@@ -137,7 +137,7 @@ tail -20 ~/.dsh/skills/fail-log-guide/SKILL.md
 Get-Content "$env:USERPROFILE\.dsh\skills\fail-log-guide\SKILL.md" -Tail 20
 ```
 
-Expected: a `FAIL-LOG` section with a `[read] ENOENT…` cause. If missing, check in order: ① startup log `[dsh-fail-logger] v0.4.2 active`; ② logDir writability warning; ③ whether that profile was restarted after install.
+Expected: a `FAIL-LOG` section with a `[read] ENOENT…` cause. If missing, check in order: ① startup log `[dsh-fail-logger] v0.4.x active`; ② logDir writability warning; ③ whether that profile was restarted after install.
 
 ## License
 

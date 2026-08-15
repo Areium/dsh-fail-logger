@@ -406,6 +406,8 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const seedText = readFileSync(new URL('../lib/seed-body.md', import.meta.url), 'utf8');
   assert.strictEqual((seedText.match(/# DSH 工具失败自纠指南/g) ?? []).length, 1, '18: seed body single title (no corruption)');
   assert.ok(!seedText.includes(String.fromCharCode(36)), '18: seed body contains no dollar char (write-pipeline safety)');
+  assert.ok(seedText.includes('old_string') && seedText.includes('精确确认'), '18: edit old_string guidance present');
+  assert.ok(seedText.includes('写入前状态确认'), '18: write state-confirmation guidance present');
   rmSync(dir, { recursive: true, force: true });
 }
 

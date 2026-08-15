@@ -6,7 +6,7 @@
 
 ## 一、写操作前三项铁律
 
-1. 覆盖已有文件前先 `read`（否则报 `without reading it first`）。
+1. 覆盖已有文件前先 `read`（否则报 `without reading it first`）；`edit` 的 `old_string` 必须先在读取内容中精确确认（避免 `old_string was not found`）。
 2. 模板字符串不嵌 Python/Shell 代码——脚本 `write` 落盘再执行，或单引号拼接。
 3. 模块/测试引用用 `new URL('./x', import.meta.url)`（+ `fileURLToPath()`），不硬编码路径。
 
@@ -18,6 +18,7 @@
 - **并发**：只读可 `Promise.all`，变更类串行，依赖前一步必须 `await`。
 - **工具选择**：读文本 `read`、找文件 `glob`、搜内容 `grep`、看图 `view_image`、确认选择 `ask_user_question`。
 - **写入内容转义与验证**：写入管道会吞掉「美元符后紧跟英文单引号」的相邻序列（实测 4 次被静默截断、无任何报错）——内容避开该组合（正则锚定避免与后随引号相邻），写完后立即 read 复核关键行完整性。
+- **写入前状态确认**：`write`/`edit` 前确认目标文件未被并发修改/删除（报 `file no longer exists` / `file changed since it was read` 时，重新 read 当前内容再操作）。
 
 ## 三、PTC（Code Mode）契约
 

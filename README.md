@@ -113,9 +113,11 @@ The push-prevention instruction is injected on every agent step:
 
 | Item | Value |
 |---|---|
-| Injected text | ~42 tokens/step in English (fixed prefix; ~10-15/step after cache hits) |
+| Injected text | npm 0.5.1 (Chinese): ~65 tokens/step | main and later (English): ~42 tokens/step (fixed prefix; ~10-15/step after cache hits) |
 | Disable | `config.injectInstructions: false` |
 | Break-even | avoiding 1 failure within 22-55 steps pays for it (one failure round-trip measured ~1600 tokens + 10-60s) |
+
+> npm does not ship the English prompt yet: npm 0.5.1 is the Chinese version (~65 tokens/step); install `github:Areium/dsh-fail-logger#main` or wait for the next release for the English version (~42 tokens/step).
 
 Turn the injection off for zero extra cost — pull-style capability (routable skill loading + failure log) remains. Scoped injection is also possible via DSH scopes; the plugin contributes globally by default.
 

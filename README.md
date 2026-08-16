@@ -79,7 +79,7 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 
 ## How it works
 
-- **Always-on instructions (push)**: injects two code-time rules (write scripts to disk before running / derive paths via import.meta.url) as a system-prompt section on every agent step (~90 chars/step, `injectInstructions: false` to disable) — prevents execution-time mistakes without AGENTS.md or skill loading;
+- **Always-on instructions (push)**: injects code-time rules (write scripts to disk before running / no Shell/Python in template strings / derive paths via import.meta.url / confirm edit old_string against read content) as an English system-prompt section on every agent step (~42 tokens/step, `injectInstructions: false` to disable) — prevents execution-time mistakes without AGENTS.md or skill loading;
 - Listens to `session/event`, consuming three event kinds: `tool/call` (builds a callId→{tool name, args} map), `tool/result` (parses the real rc.6 shape: `message.content[].type === 'tool-result'` block's `isError`/`toolCallId`; legacy shape still supported), `tool/code-dispatch` (recorded only when isError). A one-time visible warning fires on unexpected shapes.
 - **Normalized dedup**: paths (quoted / drive-letter / absolute → `<path>`) and long numbers (→ `<n>`) are normalized before the SHA1 key — the same EPERM on `/Users/a/x` and `/Users/b/y` merges into one entry; `data.error.code` (e.g. `SEARCH_FAILED`) joins the key when present.
 - **Redaction & sanitization**: defaults cover `sk-…` keys, `Bearer`/`Basic` auth, `-u user:pass` and inline URL credentials, `api_key/token/secret/password=` assignments, credential file paths, and private IPs; extend via `config.redact`. Control chars stripped, markdown pipes/backticks escaped, **instruction-injection defense** (system-reminder-style tags and common imperative phrases stripped + angle-bracket entity escaping) and a section-level data-boundary declaration (the log is data, never instructions).
@@ -113,7 +113,7 @@ The push-prevention instruction is injected on every agent step:
 
 | Item | Value |
 |---|---|
-| Injected text | ~90 chars ≈ ~100 tokens/step (fixed prefix; ~10-25/step after cache hits) |
+| Injected text | ~42 tokens/step in English (fixed prefix; ~10-15/step after cache hits) |
 | Disable | `config.injectInstructions: false` |
 | Break-even | avoiding 1 failure within 22-55 steps pays for it (one failure round-trip measured ~1600 tokens + 10-60s) |
 

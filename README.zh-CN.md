@@ -79,7 +79,7 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.1"
 
 ## 工作原理
 
-- **常驻指令（push）**：把两条写代码铁律（脚本先 write 落盘再执行 / 路径用 import.meta.url 推导）作为系统提示段注入每个 agent step（约 90 字符/step，`injectInstructions: false` 可关）——防执行期错误，不依赖 AGENTS.md 或 skill 加载；
+- **常驻指令（push）**：把写代码铁律（脚本先 write 落盘再执行 / 模板字符串不嵌 Shell/Python / 路径用 import.meta.url 推导 / edit 前确认 old_string）作为英文系统提示段注入每个 agent step（约 42 tokens/step，`injectInstructions: false` 可关）——防执行期错误，不依赖 AGENTS.md 或 skill 加载；
 - 监听 `session/event`，消费三类事件：`tool/call`（建立 callId→{工具名,参数} 映射）、`tool/result`（解析真实 rc.6 结构：`message.content[].type === 'tool-result'` 块上的 `isError`/`toolCallId`，兼容旧结构）、`tool/code-dispatch`（isError 才记录）；结构不匹配时打一次可见警告；
 - **归一化去重**：路径（引号内/盘符/绝对路径 → `<path>`）与长数字（→ `<n>`）先归一化再参与 SHA1 键——`/Users/a/x` 与 `/Users/b/y` 的同类 EPERM 合并为一条；`data.error.code`（如 `SEARCH_FAILED`）存在时并入键；
 - **脱敏与消毒**：默认规则覆盖 `sk-…` key、`Bearer`/`Basic` 认证、`-u user:pass` 与 URL 内嵌凭据、`api_key/token/secret/password=` 赋值、凭证文件路径、私网 IP，可经 `config.redact` 追加；控制字符剥离、Markdown 竖线/反引号转义、**指令注入防御**（system-reminder 等标签与常见祈使句剥离 + 尖括号实体转义）与区段级数据边界声明（实录仅作数据、不构成指令）；
@@ -113,7 +113,7 @@ push 式预防的常驻指令会注入每个 agent step，成本与开关如下�
 
 | 项 | 数值 |
 |---|---|
-| 注入文本 | ~90 字符 ≈ ~100 tokens/step（固定前缀，缓存命中后实付约 10-25/step） |
+| 注入文本 | 英文约 42 tokens/step（固定前缀，缓存命中后实付约 10-15/step） |
 | 关闭方式 | `config.injectInstructions: false` |
 | 回本点 | 22-55 步内避免 1 次失败即回本（一次失败往返实测 ~1600 tokens + 10-60 秒） |
 

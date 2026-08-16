@@ -422,8 +422,9 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   mod.apply(ctx1, {});
   assert.strictEqual(sections.length, 1, '19: section registered by default');
   assert.strictEqual(sections[0].name, 'fail-logger:iron-rules', '19: section name');
-  assert.ok(sections[0].text.includes('工具使用铁律') && sections[0].text.includes('模板字符串不嵌') && sections[0].text.includes('fail-log-guide'), '19: prompt text present');
-  assert.ok(!sections[0].text.includes('写前'), '19: DSH-base-duplicated rule removed');
+  assert.strictEqual(sections[0].order, 100, '19: order unchanged at 100');
+  assert.ok(sections[0].text.includes('template strings') && sections[0].text.includes('old_string') && sections[0].text.includes('import.meta.url') && sections[0].text.includes('fail-log-guide'), '19: prompt text present (all four rules + skill pointer)');
+  assert.ok(!sections[0].text.includes('before writing'), '19: no DSH-base-duplicated read-first rule');
   // 关
   sections = [];
   const ctx2 = { on: () => {}, systemPrompt: { section: (s) => sections.push(s) }, effect: (fn) => { fn(); return () => {}; } };

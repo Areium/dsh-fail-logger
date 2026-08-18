@@ -49,10 +49,10 @@ The observation point is the **session log** (`session/event`) — the exact sam
 dsh plugin --profile web add dsh-fail-logger
 
 # or pin to an exact version
-dsh plugin --profile web add dsh-fail-logger@0.5.1
+dsh plugin --profile web add dsh-fail-logger@0.5.2
 
 # or GitHub release tag (no npm registry dependency; auditability & rollback)
-dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.1"
+dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.2"
 
 # or manually: merge cordis.patch.yml's insert entry into ~/.dsh/profiles/web/cordis.patch.yml
 ```
@@ -113,11 +113,11 @@ The push-prevention instruction is injected on every agent step:
 
 | Item | Value |
 |---|---|
-| Injected text | npm 0.5.1 (Chinese): ~65 tokens/step | main and later (English): ~42 tokens/step (fixed prefix; ~10-15/step after cache hits) |
+| Injected text | npm 0.5.1: Chinese ~65 tokens/step | 0.5.2+: English ~42 tokens/step (fixed prefix; ~10-15/step after cache hits) |
 | Disable | `config.injectInstructions: false` |
 | Break-even | avoiding 1 failure within 22-55 steps pays for it (one failure round-trip measured ~1600 tokens + 10-60s) |
 
-> npm does not ship the English prompt yet: npm 0.5.1 is the Chinese version (~65 tokens/step); install `github:Areium/dsh-fail-logger#main` or wait for the next release for the English version (~42 tokens/step).
+> npm 0.5.1 ships the Chinese prompt (~65 tokens/step); 0.5.2+ ships the English prompt (~42 tokens/step).
 
 Turn the injection off for zero extra cost — pull-style capability (routable skill loading + failure log) remains. Scoped injection is also possible via DSH scopes; the plugin contributes globally by default.
 

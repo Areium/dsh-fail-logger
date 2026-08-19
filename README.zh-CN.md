@@ -135,11 +135,11 @@ push 式预防的常驻指令会注入每个 agent step，成本与开关如下�
 
 | 项 | 数值 |
 |---|---|
-| 注入文本 | npm 0.5.1：中文版 ~65 tokens/step ｜ 0.5.2 起：英文版 ~42 tokens/step；main（未发布）三级版：prevention 约 111 cl100k tokens + recovery 约 29 cl100k；top-errors 仅在有高频错误时约 49 cl100k，空状态为 0（静态前缀缓存友好） |
+| 注入文本 | npm 0.5.1：中文版 ~65 tokens/step ｜ 0.5.2 起：英文版 ~42 tokens/step；main 0.5.3（未发布）三级版：prevention 约 111 cl100k tokens + recovery 约 29 cl100k；top-errors 仅在有高频错误时约 49 cl100k，空状态为 0（静态前缀缓存友好） |
 | 关闭方式 | `config.injectInstructions: false` |
 | 回本点 | 22-55 步内避免 1 次失败即回本；避免一次全盘搜索即可节省 30–170 秒（一次失败往返实测 ~1600 tokens + 10-60 秒） |
 
-> npm 0.5.1 为中文提示词版；0.5.2 起为英文版（~42 tokens/step）。三级预防与超时治理规则在 `main` 上且尚未发布 npm，装 `github:Areium/dsh-fail-logger#main` 可提前使用。
+> npm 0.5.1 为中文提示词版；0.5.2 起为英文版（~42 tokens/step）。三级预防与超时治理规则在 `main`（当前 0.5.3）上且尚未发布 npm，装 `github:Areium/dsh-fail-logger#main` 可提前使用。
 
 追求零额外成本时关闭注入即可，仍保留 pull 式能力（可路由 skill 加载 + 失败实录）。也可以按会话/agent 作用域注入（DSH 支持作用域贡献，本插件默认全局）。
 

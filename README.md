@@ -135,11 +135,11 @@ The push-prevention instruction is injected on every agent step:
 
 | Item | Value |
 |---|---|
-| Injected text | npm 0.5.1: Chinese ~65 tokens/step | 0.5.2+: English ~42 tokens/step; main (unreleased) three-tier: prevention ~111 cl100k tokens + recovery ~29 cl100k; top-errors adds ~49 cl100k only while recurring failures exist (zero when empty; static prefix is cache-friendly) |
+| Injected text | npm 0.5.1: Chinese ~65 tokens/step | 0.5.2+: English ~42 tokens/step; main 0.5.3 (unreleased) three-tier: prevention ~111 cl100k tokens + recovery ~29 cl100k; top-errors adds ~49 cl100k only while recurring failures exist (zero when empty; static prefix is cache-friendly) |
 | Disable | `config.injectInstructions: false` |
 | Break-even | avoiding 1 failure within 22-55 steps pays for it; avoiding one whole-drive search saves 30–170s (one failure round-trip measured ~1600 tokens + 10-60s) |
 
-> npm 0.5.1 ships the Chinese prompt; 0.5.2+ ships the English prompt (~42 tokens/step). The three-tier prevention and timeout-governance rules live on `main` and are not published to npm yet — install `github:Areium/dsh-fail-logger#main` to try them now.
+> npm 0.5.1 ships the Chinese prompt; 0.5.2+ ships the English prompt (~42 tokens/step). The three-tier prevention and timeout-governance rules live on `main` (currently 0.5.3) and are not published to npm yet — install `github:Areium/dsh-fail-logger#main` to try them now.
 
 Turn the injection off for zero extra cost — pull-style capability (routable skill loading + failure log) remains. Scoped injection is also possible via DSH scopes; the plugin contributes globally by default.
 

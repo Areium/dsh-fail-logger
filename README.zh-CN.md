@@ -89,17 +89,33 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.2"
 - **分类渲染**：按「工具契约/文件状态冲突/文件系统/权限与沙盒/超时与预算/网络与远端/模型与平台/代码与语法/用户中止/其他」分组 + 规则模板建议（💡）；优先使用 `data.error.code`，正则均带边界避免路径/文件名误命中；排序为确定性全序（count↓ → last↓ → first↓ → hash↑）；状态超 `maxEntries×5` 自动裁剪；
 - 状态文件带 `schemaVersion` / `pluginVersion` / `updatedAt`，旧 `[run_code]` 条目自动迁移到官方 kind；`first/last` 非法条目自动丢弃。所有落盘为原子写（tmp + rename），状态损坏先备份 `.bak-<时间戳>` 再重置；启动时打印一行可见日志并探测 logDir 可写性，`logDir` 支持 `~` 展开。
 
-## 三级预防与超时治理
+## 三级预防
 
 插件把「避免再犯」拆成三级：
 
-1. **静态规则（prevention, order 90）**：最高频、几乎必然发生的错误直接固化为系统提示，不依赖 skill 加载。覆盖写盘、模板字符串、路径推导、old_string、`run_code` 直接调用契约，以及超时治理：
-   - `not-found` 后用 `Test-Path` 或窄范围 `glob`；
-   - 收紧 `grep/glob` 范围，禁止全盘扫描；
-   - 用户要求全盘搜索时，先请求更窄目录；
-   - `run_code` 保持短任务，不在其中等待用户或执行长安装。
+1. **静态规则（prevention, order 90）**：最高频、几乎必然发生的错误直接固化为系统提示，不依赖 skill 加载。覆盖写盘、模板字符串、路径推导、old_string、`run_code` 直接调用契约和路径校验。超时治理规则也属于这一级，详见下一节。
 2. **高频错误固化（top-errors, order 185）**：从 `.failures.json` 动态取最近 7 天、`count >= 2` 的 top 3 错误，并排除已被静态规则覆盖的错误，避免重复。该段仅作数据、不含 args/命令/建议，无符合条件的错误时为空，零成本。
 3. **兜底（recovery, order 190）**：同一失败重复时再加载 `fail-log-guide`，避免每次失败都支付 skill 加载成本。
+
+> `topErrors: 3` 控制固化条数，`false` 关闭。
+
+## 超时治理
+
+### 为什么要把超时写进规则
+
+全量会话日志统计到 **19 次超时类失败**：`glob` 7 次、`grep` 5 次、`run_code` 7 次。它们大多不是模型能力问题，而是：
+
+- 搜索范围过大：`C:\` / `D:\` 全盘 glob，或在 `node_modules`、DSH 安装目录等超大路径里 grep；
+- 把长任务放进了 `run_code`：执行安装类命令、递归扫描，或等待用户回答。
+
+这些失败的单次成本很高：一次失败往返通常要 10–60 秒，一次全盘搜索可到 30–170 秒。对以「完成速度」为核心的项目来说，超时是比 token 更贵的成本，因此把超时场景提升为静态预防规则。
+
+### 已处理的四类超时场景
+
+1. **`not-found` 后的排查**：先 `Test-Path` 或窄范围 `glob`，不要全盘扫描。
+2. **`grep/glob` 超大范围搜索**：收紧搜索根目录和 pattern，禁止扫描整个驱动器。
+3. **用户明确要求全盘搜索**：先请求一个更窄的起始目录，而不是直接执行。
+4. **`run_code` 长任务**：不在其中等待用户或执行长安装，保持 run_code 短小。
 
 真机验证（本地 headless，2026-08）：
 
@@ -108,8 +124,7 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.2"
 | `not-found` 后继续确认文件 | `read→read→glob(30s 超时)→pwsh×2`，53.1s | `read→read→pwsh×2`，16.1s / 20.1s |
 | 明确要求全盘搜索 `C:\` | 108s / 177s | 9.4s，0 次工具调用，模型先请求更窄路径 |
 
-> `topErrors: 3` 控制固化条数，`false` 关闭；超时治理规则随 `injectInstructions` 一并开关。
-
+> 超时治理规则随 `injectInstructions` 一并开关。
 ## 已知限制
 
 - **只记录到达会话日志的失败**：工具执行过程中进程崩溃等无法产生 `tool/result` 的极端失败不在覆盖范围。

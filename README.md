@@ -89,17 +89,33 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 - **Categorized rendering**: grouped under tool contract / file-state conflict / filesystem / permissions & sandbox / timeout & budget / network & remote / model & platform / code & syntax / user abort / other, with rule-based 💡 suggestions. `data.error.code` takes priority and regexes are word-bounded so paths/filenames cannot cause false matches. Deterministic total-order ranking (count↓ → last↓ → first↓ → hash↑); state pruned beyond `maxEntries×5`.
 - State files carry `schemaVersion` / `pluginVersion` / `updatedAt`; legacy `[run_code]` entries migrate to their official kinds, and entries with invalid `first/last` dates are dropped. All writes are atomic (tmp + rename); corrupt state is backed up as `.bak-<timestamp>` before reset; a visible startup line logs activation and probes logDir writability; `logDir` supports `~` expansion.
 
-## Three-tier prevention & timeout governance
+## Three-tier prevention
 
 The plugin splits failure prevention into three tiers:
 
-1. **Static rules (prevention, order 90)**: the highest-frequency, near-certain mistakes are hard-coded into the system prompt, so prevention does not depend on skill loading. This includes the timeout governance rules:
-   - after `not-found`, use `Test-Path` or a narrow `glob`;
-   - keep `grep/glob` scopes narrow and never scan whole drives;
-   - when asked to scan a whole drive, ask for a narrower path first;
-   - keep `run_code` short: no long installs and no waiting for the user inside it.
+1. **Static rules (prevention, order 90)**: the highest-frequency, near-certain mistakes are hard-coded into the system prompt, so prevention does not depend on skill loading. This covers write-before-run, template-string discipline, path derivation, `old_string` confirmation, the `run_code` direct-call contract, and path checks. Timeout governance is part of this tier and is detailed below.
 2. **Solidified top errors (top-errors, order 185)**: the top 3 recurring failures from the last 7 days (`count >= 2`) are rendered into the system prompt, excluding anything already covered by the static rules. The section is data-only (no args, commands, or advice) and empty when no recurring failures exist.
 3. **Fallback (recovery, order 190)**: load `fail-log-guide` only when the same failure repeats, instead of paying skill-loading cost after every failure.
+
+> `topErrors: 3` sets the number of solidified entries; `false` disables it.
+
+## Timeout governance
+
+### Why timeouts are now first-class rules
+
+Across the local session logs, **19 timeout-class failures** were observed: 7 `glob`, 5 `grep`, and 7 `run_code`. Most were not model-capability issues but scope problems:
+
+- over-wide searches: whole-drive `glob` on `C:\` / `D:\`, or `grep` over huge paths such as `node_modules` and DSH install directories;
+- long work stuffed into `run_code`: installs, recursive scans, or waiting for user answers inside the program.
+
+These failures are expensive: one failed round-trip typically costs 10–60 seconds and one whole-drive search can cost 30–170 seconds. For completion speed, timeout is more expensive than tokens, so the timeout patterns are promoted to static prevention rules.
+
+### Four covered timeout cases
+
+1. **Post-`not-found` investigation**: use `Test-Path` or a narrow `glob` instead of scanning whole drives.
+2. **Over-wide `grep/glob`**: narrow the search root and pattern; never scan an entire drive.
+3. **Explicit whole-drive search requests**: ask for a narrower starting directory first.
+4. **Long `run_code` tasks**: do not wait for users or run long installs inside it; keep `run_code` short.
 
 Local headless verification (2026-08):
 
@@ -108,8 +124,7 @@ Local headless verification (2026-08):
 | Continue checking a missing file after `not-found` | `read→read→glob(30s timeout)→pwsh×2`, 53.1s | `read→read→pwsh×2`, 16.1s / 20.1s |
 | Whole-drive content search over `C:\` | 108s / 177s | 9.4s, zero tool calls, model asks for a narrower path first |
 
-> `topErrors: 3` sets the number of solidified entries; `false` disables it. Timeout governance follows the `injectInstructions` switch.
-
+> Timeout governance follows the `injectInstructions` switch.
 ## Known limitations
 
 - **Only failures that reach the session log**: catastrophic process death during tool execution is out of scope.

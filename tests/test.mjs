@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -411,8 +411,19 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-// ===== 19：常驻指令注入（systemPrompt.section）+ 开关 =====";
+// ===== 19：常驻指令注入（systemPrompt.section）+ 开关 =====
 {
+  const now = new Date().toISOString();
+  const dir = mkdtempSync(join(tmpdir(), 'f19-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, '.failures.json'), JSON.stringify({
+    entries: {
+      a: { kind: 'tool', message: '[read] Error: cannot read target: not found', count: 4, first: now, last: now },
+      b: { kind: 'tool', message: '[grep] Error: tool call timed out after 30000ms', count: 3, first: now, last: now },
+      c: { kind: 'tool', message: '[shell] Error: tool call aborted', count: 2, first: now, last: now }
+    },
+    days: { '2026-08-20': 6 }
+  }));
   const mod = await import(MOD);
   assert.ok(Array.isArray(mod.inject) && mod.inject.includes('systemPrompt'), '19: inject declares systemPrompt');
   // 开（默认）
@@ -420,18 +431,38 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const ctxOn = { on: () => {} };
   const ctx1 = { on: () => {}, systemPrompt: { section: (s) => sections.push(s) }, effect: (fn) => { fn(); return () => {}; } };
   mod.apply(ctx1, {});
-  assert.strictEqual(sections.length, 1, '19: section registered by default');
-  assert.strictEqual(sections[0].name, 'fail-logger:iron-rules', '19: section name');
-  assert.strictEqual(sections[0].order, 100, '19: order unchanged at 100');
-  assert.ok(sections[0].text.includes('template strings') && sections[0].text.includes('old_string') && sections[0].text.includes('import.meta.url') && sections[0].text.includes('fail-log-guide'), '19: prompt text present (all four rules + skill pointer)');
+  assert.strictEqual(sections.length, 3, '19: prevention + top-errors + recovery sections registered by default');
+  assert.strictEqual(sections[0].name, 'fail-logger:prevention', '19: prevention section name');
+  assert.strictEqual(sections[0].order, 90, '19: prevention order at 90');
+  assert.ok(sections[0].text.includes('template strings') && sections[0].text.includes('old_string') && sections[0].text.includes('import.meta.url'), '19: prevention text present');
+  assert.ok(sections[0].text.includes('Only run_code is callable directly') && sections[0].text.includes('tools.<name>()'), '19: unknown-tool prevention present');
+  assert.ok(sections[0].text.includes('Verify file paths before read/edit/write') && sections[0].text.includes("don't retry not-found"), '19: path-verification prevention present');
+  assert.ok(sections[0].text.includes('After not-found, use Test-Path or narrow glob') && sections[0].text.includes('never scan whole drives'), '19: time-saving not-found recovery rule present');
+  assert.ok(sections[0].text.includes('Narrow grep/glob scope') && sections[0].text.includes('Keep run_code short'), '19: timeout-prevention rules present');
+  assert.ok(sections[0].text.includes('If asked to scan a whole drive') && sections[0].text.includes('narrower path first'), '19: ask-before-full-scan rule present');
+  assert.ok(sections[0].text.length < 580, '19: prevention text stays compact');
+  assert.ok(!sections[0].text.includes('fail-log-guide'), '19: skill-load recovery is not mixed into prevention text');
+  assert.strictEqual(sections[1].name, 'fail-logger:top-errors', '19: top-errors section name');
+  assert.strictEqual(sections[1].order, 185, '19: top-errors order at 185');
+  assert.strictEqual(typeof sections[1].text, 'function', '19: top-errors text is a dynamic provider');
+  const top = sections[1].text({});
+  assert.ok(top.includes('Other recent recurring tool failures'), '19: top-errors title marks non-static failures');
+  assert.ok(top.includes('[grep]') && top.includes('×3'), '19: top-errors renders non-static high-frequency failures');
+  assert.ok(!top.includes('[read]') && !top.includes('not found'), '19: static-prevention failures are filtered out of top-errors');
+  assert.ok(!top.includes('command') && !top.includes('args'), '19: top-errors excludes raw args');
+  assert.ok(!top.includes('先确认'), '19: top-errors is data-only and does not duplicate prevention tips');
+  assert.strictEqual(sections[2].name, 'fail-logger:recovery', '19: recovery section name');
+  assert.strictEqual(sections[2].order, 190, '19: recovery order at 190');
+  assert.ok(sections[2].text.includes('After a failed tool call') && sections[2].text.includes('check the recurring failures above') && sections[2].text.includes('fail-log-guide'), '19: recovery text is skill-on-repeat, not MUST-always');
+  assert.ok(!sections[2].text.includes('you MUST load'), '19: MUST-always recovery removed');
   assert.ok(!sections[0].text.includes('before writing'), '19: no DSH-base-duplicated read-first rule');
   // 关
   sections = [];
   const ctx2 = { on: () => {}, systemPrompt: { section: (s) => sections.push(s) }, effect: (fn) => { fn(); return () => {}; } };
   mod.apply(ctx2, { injectInstructions: false });
   assert.strictEqual(sections.length, 0, '19: disabled via config');
+  rmSync(dir, { recursive: true, force: true });
 }
-
 // ===== 20：指令注入投毒防御（标签剥离 + 实体转义 + 数据边界声明）=====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f20-'));
@@ -457,4 +488,101 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (20 suites)');
+// ===== 21：真实 Error: code run failed 前缀 + 错误码/边界分类 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f21-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/call', call('c21r', 'run_code'));
+  ctx.emit('tool/result', resultReal('c21r', 'Error: code run failed (exception): ReferenceError: require is not defined', true, { name: 'CodeRunFailedError', code: 'CODE_RUN_FAILED' }));
+  ctx.emit('tool/call', call('c21i', 'read_image'));
+  ctx.emit('tool/result', resultReal('c21i', 'Error: cannot read "D:\\Code\\test\\牛客网_用户120063338_20250508.png" as an image: model "deepseek-v4-flash" does not declare image input', true));
+  await sleep(450);
+  const s = readState(dir);
+  assert.strictEqual(s.schemaVersion, 2, '21: schema version written');
+  const rc = Object.values(s.entries).find(e => e.message === 'ReferenceError: require is not defined');
+  assert.ok(rc && rc.kind === 'exception' && rc.code === 'CODE_RUN_FAILED', '21: real Error-prefixed run_code parsed and code stored');
+  const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+  assert.ok(skill.includes('### 代码与语法'), '21: syntax/runtime category');
+  assert.ok(skill.includes('### 模型与平台'), '21: model-capability category');
+  assert.ok(skill.includes('[exception] ReferenceError: require is not defined'), '21: official kind rendered');
+  assert.ok(!skill.includes('20250508.png') || skill.indexOf('20250508.png') > skill.indexOf('### 模型与平台'), '21: 5xx filename not misclassified as network');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 22：旧 [run_code] 状态迁移 + 非法日期清理 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f22-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const now = new Date().toISOString();
+  writeFileSync(join(dir, '.failures.json'), JSON.stringify({ schemaVersion: 1, entries: { legacy: { kind: 'tool', message: '[run_code] Error: code run failed (exception): ReferenceError: x is not defined', count: 3, first: now, last: now }, bad: { kind: 'tool', message: '[x] bad date', count: 1, first: 'not-a-date', last: now } }, days: {} }));
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'flush trigger', true));
+  await sleep(450);
+  const s = readState(dir);
+  const migrated = Object.values(s.entries).find(e => e.kind === 'exception' && e.message === 'ReferenceError: x is not defined');
+  assert.ok(migrated && migrated.count === 3, '22: legacy [run_code] migrated to official kind');
+  assert.ok(!Object.values(s.entries).some(e => e.message.startsWith('[run_code]')), '22: legacy key removed');
+  assert.ok(!Object.values(s.entries).some(e => e.message === '[x] bad date'), '22: invalid first date dropped');
+  assert.strictEqual(s.schemaVersion, 2, '22: migrated schema version');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 23：logDir 展开 ~ =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f23-home-'));
+  const savedUser = process.env.USERPROFILE;
+  delete process.env.FAIL_LOG_DIR;
+  delete process.env.PTC_FAIL_LOG_DIR;
+  process.env.USERPROFILE = dir;
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { logDir: '~/fl-expand' });
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'home expand', true));
+  await sleep(450);
+  assert.ok(existsSync(join(dir, 'fl-expand', '.failures.json')), '23: ~ logDir expanded to USERPROFILE');
+  if (savedUser === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = savedUser;
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 24：趋势线为今天→6 天前 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f24-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'yesterday', true), Date.now() - 86400e3);
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'today', true), Date.now());
+  await sleep(450);
+  const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+  const m = skill.match(/近 7 天失败: ([0-9→]+)/);
+  assert.ok(m, '24: trend line present');
+  assert.ok(m[1].startsWith('1→1→0→0→0→0→0'), '24: trend is today→6 days ago');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 25：tool/call 缺失时 run_code fallback =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f25-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, {});
+  ctx.emit('tool/result', resultReal('call_never_seen', 'Error: code run failed (timeout): wall-clock ceiling reached (600000ms)', true, { name: 'CodeRunFailedError', code: 'CODE_RUN_FAILED' }));
+  await sleep(450);
+  const s = readState(dir);
+  assert.ok(Object.values(s.entries).some(e => e.kind === 'timeout' && e.message === 'wall-clock ceiling reached (600000ms)'), '25: unknown callId run_code parsed via fallback');
+  assert.ok(!Object.values(s.entries).some(e => e.message.startsWith('[unknown]')), '25: no unknown run_code entry');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (25 suites)');

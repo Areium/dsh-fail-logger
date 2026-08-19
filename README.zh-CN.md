@@ -74,19 +74,41 @@ dsh plugin --profile web add "github:Areium/dsh-fail-logger#v0.5.2"
         ttlDays: 30        # N 天无新发生的条目自动删除（0 = 永久保留）
         redact: []         # 额外脱敏正则（字符串数组）
         ignore: []         # 忽略名单（工具名/消息正则，如 ['^read', '故意|noise']）
-        injectInstructions: true  # 常驻注入两条写代码铁律（push 式预防，false 关闭）
+        injectInstructions: true  # 常驻注入三级预防提示（push 式，false 全部关闭）
+        topErrors: 3         # 固化为系统提示的次高频错误条数（false 关闭）
 ```
 
 ## 工作原理
 
-- **常驻指令（push）**：把写代码铁律（脚本先 write 落盘再执行 / 模板字符串不嵌 Shell/Python / 路径用 import.meta.url 推导 / edit 前确认 old_string）作为英文系统提示段注入每个 agent step（约 42 tokens/step，`injectInstructions: false` 可关）——防执行期错误，不依赖 AGENTS.md 或 skill 加载；
+- **常驻指令（push，三级预防）**：每个 agent step 注入三个独立系统提示段——`prevention`（order 90，最高频错误静态规则，含路径校验、`run_code` 直接调用契约与超时治理规则）、`top-errors`（order 185，从 `.failures.json` 动态固化的次高频错误，已排除静态规则覆盖项）、`recovery`（order 190，重复失败才加载 fail-log-guide）；`injectInstructions: false` 可整体关闭；
 - 监听 `session/event`，消费三类事件：`tool/call`（建立 callId→{工具名,参数} 映射）、`tool/result`（解析真实 rc.6 结构：`message.content[].type === 'tool-result'` 块上的 `isError`/`toolCallId`，兼容旧结构）、`tool/code-dispatch`（isError 才记录）；结构不匹配时打一次可见警告；
 - **归一化去重**：路径（引号内/盘符/绝对路径 → `<path>`）与长数字（→ `<n>`）先归一化再参与 SHA1 键——`/Users/a/x` 与 `/Users/b/y` 的同类 EPERM 合并为一条；`data.error.code`（如 `SEARCH_FAILED`）存在时并入键；
 - **脱敏与消毒**：默认规则覆盖 `sk-…` key、`Bearer`/`Basic` 认证、`-u user:pass` 与 URL 内嵌凭据、`api_key/token/secret/password=` 赋值、凭证文件路径、私网 IP，可经 `config.redact` 追加；控制字符剥离、Markdown 竖线/反引号转义、**指令注入防御**（system-reminder 等标签与常见祈使句剥离 + 尖括号实体转义）与区段级数据边界声明（实录仅作数据、不构成指令）；
 - **跨进程锁合并**：flush 时以独占锁（`wx`，陈旧 5s 自动回收）持锁重读磁盘状态并**合并计数**，web/headless 双开不再互相覆盖增量；写失败保持 dirty 并 2s 后重试；
 - **趋势与 TTL**：状态按天计数，区段顶部渲染「近 7 天失败」趋势线；条目超 `ttlDays` 无新发生自动归档；
-- **分类渲染**：按「文件系统/权限与沙盒/超时与预算/网络与远端/其他」分组 + 规则模板建议（💡）；排序为确定性全序（count↓ → last↓ → first↓ → hash↑）；状态超 `maxEntries×5` 自动裁剪；
-- 所有落盘为原子写（tmp + rename），状态损坏先备份 `.bak-<时间戳>` 再重置；启动时打印一行可见日志并探测 logDir 可写性。
+- **分类渲染**：按「工具契约/文件状态冲突/文件系统/权限与沙盒/超时与预算/网络与远端/模型与平台/代码与语法/用户中止/其他」分组 + 规则模板建议（💡）；优先使用 `data.error.code`，正则均带边界避免路径/文件名误命中；排序为确定性全序（count↓ → last↓ → first↓ → hash↑）；状态超 `maxEntries×5` 自动裁剪；
+- 状态文件带 `schemaVersion` / `pluginVersion` / `updatedAt`，旧 `[run_code]` 条目自动迁移到官方 kind；`first/last` 非法条目自动丢弃。所有落盘为原子写（tmp + rename），状态损坏先备份 `.bak-<时间戳>` 再重置；启动时打印一行可见日志并探测 logDir 可写性，`logDir` 支持 `~` 展开。
+
+## 三级预防与超时治理
+
+插件把「避免再犯」拆成三级：
+
+1. **静态规则（prevention, order 90）**：最高频、几乎必然发生的错误直接固化为系统提示，不依赖 skill 加载。覆盖写盘、模板字符串、路径推导、old_string、`run_code` 直接调用契约，以及超时治理：
+   - `not-found` 后用 `Test-Path` 或窄范围 `glob`；
+   - 收紧 `grep/glob` 范围，禁止全盘扫描；
+   - 用户要求全盘搜索时，先请求更窄目录；
+   - `run_code` 保持短任务，不在其中等待用户或执行长安装。
+2. **高频错误固化（top-errors, order 185）**：从 `.failures.json` 动态取最近 7 天、`count >= 2` 的 top 3 错误，并排除已被静态规则覆盖的错误，避免重复。该段仅作数据、不含 args/命令/建议，无符合条件的错误时为空，零成本。
+3. **兜底（recovery, order 190）**：同一失败重复时再加载 `fail-log-guide`，避免每次失败都支付 skill 加载成本。
+
+真机验证（本地 headless，2026-08）：
+
+| 场景 | 改动前 | 改动后 |
+|---|---|---|
+| `not-found` 后继续确认文件 | `read→read→glob(30s 超时)→pwsh×2`，53.1s | `read→read→pwsh×2`，16.1s / 20.1s |
+| 明确要求全盘搜索 `C:\` | 108s / 177s | 9.4s，0 次工具调用，模型先请求更窄路径 |
+
+> `topErrors: 3` 控制固化条数，`false` 关闭；超时治理规则随 `injectInstructions` 一并开关。
 
 ## 已知限制
 
@@ -113,11 +135,11 @@ push 式预防的常驻指令会注入每个 agent step，成本与开关如下�
 
 | 项 | 数值 |
 |---|---|
-| 注入文本 | npm 0.5.1：中文版 ~65 tokens/step ｜ 0.5.2 起（英文版）：~42 tokens/step（固定前缀，缓存命中后实付约 10-15/step） |
+| 注入文本 | npm 0.5.1：中文版 ~65 tokens/step ｜ 0.5.2 起：英文版 ~42 tokens/step；main（未发布）三级版：prevention 约 111 cl100k tokens + recovery 约 29 cl100k；top-errors 仅在有高频错误时约 49 cl100k，空状态为 0（静态前缀缓存友好） |
 | 关闭方式 | `config.injectInstructions: false` |
-| 回本点 | 22-55 步内避免 1 次失败即回本（一次失败往返实测 ~1600 tokens + 10-60 秒） |
+| 回本点 | 22-55 步内避免 1 次失败即回本；避免一次全盘搜索即可节省 30–170 秒（一次失败往返实测 ~1600 tokens + 10-60 秒） |
 
-> npm 0.5.1 为中文提示词版（~65 tokens/step）；0.5.2 起为英文版（~42 tokens/step）。
+> npm 0.5.1 为中文提示词版；0.5.2 起为英文版（~42 tokens/step）。三级预防与超时治理规则在 `main` 上且尚未发布 npm，装 `github:Areium/dsh-fail-logger#main` 可提前使用。
 
 追求零额外成本时关闭注入即可，仍保留 pull 式能力（可路由 skill 加载 + 失败实录）。也可以按会话/agent 作用域注入（DSH 支持作用域贡献，本插件默认全局）。
 
@@ -144,7 +166,7 @@ push 式预防的常驻指令会注入每个 agent step，成本与开关如下�
 
 ```sh
 npm run check   # node --check lib/index.js
-npm test        # 20 组单测：真实事件结构解析/旧结构兼容/归一化去重/脱敏/投毒防御/裁剪/TTL/损坏恢复/标记归位/防抖/dispose/锁竞争/忽略名单/种子正文/日志回放
+npm test        # 25 组单测：真实事件结构解析/run_code 官方 kind 与旧状态迁移/错误码优先分类/趋势线顺序/~ 展开/schema 校验/callId 回退/旧结构兼容/归一化去重/脱敏/投毒防御/裁剪/TTL/损坏恢复/标记归位/防抖/dispose/锁竞争/忽略名单/种子正文/日志回放
 ```
 
 **真实日志回放**（对抗「假绿」）：`FAIL_LOG_REPLAY=<session.jsonl> npm test` 或直接把真实会话日志喂给插件回放入口。会话日志位置 `~/.dsh/sessions/**/session.jsonl`（若为 zstd 压缩先 `zstd -d` 解压）。仓库内 `tests/fixtures/session.jsonl` 即一份真实结构夹具，CI 每次运行。

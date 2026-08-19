@@ -74,7 +74,8 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
         ttlDays: 30        # drop entries with no new occurrence for N days (0 = keep forever)
         redact: []         # extra redaction regexes (string array)
         ignore: []         # ignore list (tool-name/message regexes, e.g. ['^read', 'deliberate|noise'])
-        injectInstructions: true  # always-on two code-time rules injection (push prevention; false to disable)
+        injectInstructions: true  # always-on three-tier prompt injection (push prevention; false disables all)
+        topErrors: 3         # max recurring failures solidified into the system prompt (false disables)
 ```
 
 ## How it works
@@ -85,8 +86,29 @@ Restart `dsh --profile web`. Zero configuration, works out of the box. Same for 
 - **Redaction & sanitization**: defaults cover `sk-…` keys, `Bearer`/`Basic` auth, `-u user:pass` and inline URL credentials, `api_key/token/secret/password=` assignments, credential file paths, and private IPs; extend via `config.redact`. Control chars stripped, markdown pipes/backticks escaped, **instruction-injection defense** (system-reminder-style tags and common imperative phrases stripped + angle-bracket entity escaping) and a section-level data-boundary declaration (the log is data, never instructions).
 - **Cross-process lock-merge**: flush takes an exclusive lock (`wx`, stale >5s recycled) and re-reads + merges the on-disk state before writing — web/headless concurrency no longer loses increments; failed writes keep dirty and retry after 2s.
 - **Trend & TTL**: per-day counters render a "last 7 days" trend line; entries with no new occurrence for `ttlDays` are archived.
-- **Categorized rendering**: grouped under filesystem / permissions & sandbox / timeout & budget / network & remote / other, with rule-based 💡 suggestions; deterministic total-order ranking (count↓ → last↓ → first↓ → hash↑); state pruned beyond `maxEntries×5`.
-- All writes are atomic (tmp + rename); corrupt state is backed up as `.bak-<timestamp>` before reset; a visible startup line logs activation and probes logDir writability.
+- **Categorized rendering**: grouped under tool contract / file-state conflict / filesystem / permissions & sandbox / timeout & budget / network & remote / model & platform / code & syntax / user abort / other, with rule-based 💡 suggestions. `data.error.code` takes priority and regexes are word-bounded so paths/filenames cannot cause false matches. Deterministic total-order ranking (count↓ → last↓ → first↓ → hash↑); state pruned beyond `maxEntries×5`.
+- State files carry `schemaVersion` / `pluginVersion` / `updatedAt`; legacy `[run_code]` entries migrate to their official kinds, and entries with invalid `first/last` dates are dropped. All writes are atomic (tmp + rename); corrupt state is backed up as `.bak-<timestamp>` before reset; a visible startup line logs activation and probes logDir writability; `logDir` supports `~` expansion.
+
+## Three-tier prevention & timeout governance
+
+The plugin splits failure prevention into three tiers:
+
+1. **Static rules (prevention, order 90)**: the highest-frequency, near-certain mistakes are hard-coded into the system prompt, so prevention does not depend on skill loading. This includes the timeout governance rules:
+   - after `not-found`, use `Test-Path` or a narrow `glob`;
+   - keep `grep/glob` scopes narrow and never scan whole drives;
+   - when asked to scan a whole drive, ask for a narrower path first;
+   - keep `run_code` short: no long installs and no waiting for the user inside it.
+2. **Solidified top errors (top-errors, order 185)**: the top 3 recurring failures from the last 7 days (`count >= 2`) are rendered into the system prompt, excluding anything already covered by the static rules. The section is data-only (no args, commands, or advice) and empty when no recurring failures exist.
+3. **Fallback (recovery, order 190)**: load `fail-log-guide` only when the same failure repeats, instead of paying skill-loading cost after every failure.
+
+Local headless verification (2026-08):
+
+| Scenario | Before | After |
+|---|---|---|
+| Continue checking a missing file after `not-found` | `read→read→glob(30s timeout)→pwsh×2`, 53.1s | `read→read→pwsh×2`, 16.1s / 20.1s |
+| Whole-drive content search over `C:\` | 108s / 177s | 9.4s, zero tool calls, model asks for a narrower path first |
+
+> `topErrors: 3` sets the number of solidified entries; `false` disables it. Timeout governance follows the `injectInstructions` switch.
 
 ## Known limitations
 
@@ -113,11 +135,11 @@ The push-prevention instruction is injected on every agent step:
 
 | Item | Value |
 |---|---|
-| Injected text | npm 0.5.1: Chinese ~65 tokens/step | 0.5.2+: English ~42 tokens/step (fixed prefix; ~10-15/step after cache hits) |
+| Injected text | npm 0.5.1: Chinese ~65 tokens/step | 0.5.2+: English ~42 tokens/step; main (unreleased) three-tier: prevention ~111 cl100k tokens + recovery ~29 cl100k; top-errors adds ~49 cl100k only while recurring failures exist (zero when empty; static prefix is cache-friendly) |
 | Disable | `config.injectInstructions: false` |
-| Break-even | avoiding 1 failure within 22-55 steps pays for it (one failure round-trip measured ~1600 tokens + 10-60s) |
+| Break-even | avoiding 1 failure within 22-55 steps pays for it; avoiding one whole-drive search saves 30–170s (one failure round-trip measured ~1600 tokens + 10-60s) |
 
-> npm 0.5.1 ships the Chinese prompt (~65 tokens/step); 0.5.2+ ships the English prompt (~42 tokens/step).
+> npm 0.5.1 ships the Chinese prompt; 0.5.2+ ships the English prompt (~42 tokens/step). The three-tier prevention and timeout-governance rules live on `main` and are not published to npm yet — install `github:Areium/dsh-fail-logger#main` to try them now.
 
 Turn the injection off for zero extra cost — pull-style capability (routable skill loading + failure log) remains. Scoped injection is also possible via DSH scopes; the plugin contributes globally by default.
 
@@ -144,7 +166,7 @@ Turn the injection off for zero extra cost — pull-style capability (routable s
 
 ```sh
 npm run check   # node --check lib/index.js
-npm test        # 20 suites: real event-shape parsing/legacy compat/normalized dedup/redaction/anti-poisoning/pruning/TTL/corruption recovery/marker healing/debounce/dispose/lock contention/ignore list/seed body/log replay
+npm test        # 25 suites: real event-shape parsing/run_code official kinds + legacy state migration/error-code-first categorization/trend order/~ expansion/schema validation/callId fallback/legacy compat/normalized dedup/redaction/anti-poisoning/pruning/TTL/corruption recovery/marker healing/debounce/dispose/lock contention/ignore list/seed body/log replay
 ```
 
 **Real-log replay** (against fake-green tests): `FAIL_LOG_REPLAY=<session.jsonl> npm test` feeds real session events into the same handler. Session logs live at `~/.dsh/sessions/**/session.jsonl` (run `zstd -d` first if compressed). `tests/fixtures/session.jsonl` is a real-shape fixture run by CI on every push.

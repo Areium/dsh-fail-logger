@@ -537,9 +537,11 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
 // ===== 23：logDir 展开 ~ =====
 {
   const dir = mkdtempSync(join(tmpdir(), 'f23-home-'));
+  const savedHome = process.env.HOME;
   const savedUser = process.env.USERPROFILE;
   delete process.env.FAIL_LOG_DIR;
   delete process.env.PTC_FAIL_LOG_DIR;
+  process.env.HOME = dir;
   process.env.USERPROFILE = dir;
   const mod = await import(MOD);
   const ctx = mkCtx();
@@ -547,6 +549,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   ctx.emit('tool/code-dispatch', dispatch('bash', 'home expand', true));
   await sleep(450);
   assert.ok(existsSync(join(dir, 'fl-expand', '.failures.json')), '23: ~ logDir expanded to USERPROFILE');
+  if (savedHome === undefined) delete process.env.HOME; else process.env.HOME = savedHome;
   if (savedUser === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = savedUser;
   rmSync(dir, { recursive: true, force: true });
 }

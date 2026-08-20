@@ -6,7 +6,7 @@
 
 ## 一、写操作前三项铁律
 
-1. 覆盖已有文件前先 `read`（否则报 `without reading it first`）；`edit` 的 `old_string` 必须先在读取内容中精确确认（避免 `old_string was not found`）。
+1. 覆盖已有文件前先 `read`（否则报 `without reading it first`）。
 2. 模板字符串不嵌 Python/Shell 代码——脚本 `write` 落盘再执行，或单引号拼接。
 3. 模块/测试引用用 `new URL('./x', import.meta.url)`（+ `fileURLToPath()`），不硬编码路径。
 

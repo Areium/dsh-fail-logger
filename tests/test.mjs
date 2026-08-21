@@ -406,7 +406,8 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const seedText = readFileSync(new URL('../lib/seed-body.md', import.meta.url), 'utf8');
   assert.strictEqual((seedText.match(/# DSH 工具失败自纠指南/g) ?? []).length, 1, '18: seed body single title (no corruption)');
   assert.ok(!seedText.includes(String.fromCharCode(36)), '18: seed body contains no dollar char (write-pipeline safety)');
-  assert.ok(seedText.includes('old_string') && seedText.includes('精确确认'), '18: edit old_string guidance present');
+  assert.ok(seedText.includes('覆盖已有文件前先 `read`'), '18: read-before-overwrite rule present');
+  assert.ok(!seedText.includes('old_string'), '18: old_string clause removed from seed rule ① (DSH base enforces read-first)');
   assert.ok(seedText.includes('写入前状态确认'), '18: write state-confirmation guidance present');
   rmSync(dir, { recursive: true, force: true });
 }
@@ -434,7 +435,8 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   assert.strictEqual(sections.length, 3, '19: prevention + top-errors + recovery sections registered by default');
   assert.strictEqual(sections[0].name, 'fail-logger:prevention', '19: prevention section name');
   assert.strictEqual(sections[0].order, 90, '19: prevention order at 90');
-  assert.ok(sections[0].text.includes('template strings') && sections[0].text.includes('old_string') && sections[0].text.includes('import.meta.url'), '19: prevention text present');
+  assert.ok(sections[0].text.includes('template strings') && sections[0].text.includes('import.meta.url'), '19: prevention text present');
+  assert.ok(!sections[0].text.includes('old_string'), '19: old_string clause not duplicated from DSH base policy');
   assert.ok(sections[0].text.includes('Only run_code is callable directly') && sections[0].text.includes('tools.<name>()'), '19: unknown-tool prevention present');
   assert.ok(sections[0].text.includes('Verify file paths before read/edit/write') && sections[0].text.includes("don't retry not-found"), '19: path-verification prevention present');
   assert.ok(sections[0].text.includes('After not-found, use Test-Path or narrow glob') && sections[0].text.includes('never scan whole drives'), '19: time-saving not-found recovery rule present');

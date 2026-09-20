@@ -1,4 +1,5 @@
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync, existsSync, utimesSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
@@ -29,6 +30,9 @@ const resultReal = (callId, text, isError = true, errMeta) => ({
 const resultOld = (callId, content, isError = true) => ({ turn: 1, step: 1, message: { callId, content, isError } });
 const dispatch = (name, content, isError = true, args = {}) => ({ rootCallId: 'r', parentCallId: 'p', subCallId: 's', name, arguments: args, isError, content });
 const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 'utf8'));
+// 复刻插件键计算（与 lib/index.js 的 normKey/hashOf 保持一致，测试 27/30 用）
+const normKey = (s) => s.replace(/'[^']*[\\/][^']*'/g, "'<path>'").replace(/[A-Za-z]:\\[^\s'"]+/g, '<path>').replace(/\/[^\s'"]+/g, '<path>').replace(/\b\d{5,}\b/g, '<n>');
+const hashOf = (k, m) => createHash('sha1').update(k + '|' + m).digest('hex').slice(0, 16);
 
 // ===== 1：真实结构原生工具失败（isError 在 tool-result 块上）+ 命令参数 + 非错误忽略 =====
 {
@@ -421,7 +425,8 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
     entries: {
       a: { kind: 'tool', message: '[read] Error: cannot read target: not found', count: 4, first: now, last: now },
       b: { kind: 'tool', message: '[grep] Error: tool call timed out after 30000ms', count: 3, first: now, last: now },
-      c: { kind: 'tool', message: '[shell] Error: tool call aborted', count: 2, first: now, last: now }
+      c: { kind: 'tool', message: '[shell] Error: tool call aborted', count: 2, first: now, last: now },
+      d: { kind: 'tool', message: '[edit] Error: old_string was not found in "D:\\x\\a.md"', count: 5, first: now, last: now }
     },
     days: { '2026-08-20': 6 }
   }));
@@ -436,13 +441,13 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   assert.strictEqual(sections[0].name, 'fail-logger:prevention', '19: prevention section name');
   assert.strictEqual(sections[0].order, 90, '19: prevention order at 90');
   assert.ok(sections[0].text.includes('template strings') && sections[0].text.includes('import.meta.url'), '19: prevention text present');
-  assert.ok(!sections[0].text.includes('old_string'), '19: old_string clause not duplicated from DSH base policy');
+  assert.ok(sections[0].text.includes('read it first in this session') && sections[0].text.includes('old_string'), '19: read-before-edit + old_string clause restored (edit-trio is the top failure family)');
   assert.ok(sections[0].text.includes('Only run_code is callable directly') && sections[0].text.includes('tools.<name>()'), '19: unknown-tool prevention present');
   assert.ok(sections[0].text.includes('Verify file paths before read/edit/write') && sections[0].text.includes("don't retry not-found"), '19: path-verification prevention present');
   assert.ok(sections[0].text.includes('After not-found, use Test-Path or narrow glob') && sections[0].text.includes('never scan whole drives'), '19: time-saving not-found recovery rule present');
   assert.ok(sections[0].text.includes('Narrow grep/glob scope') && sections[0].text.includes('Keep run_code short'), '19: timeout-prevention rules present');
   assert.ok(sections[0].text.includes('If asked to scan a whole drive') && sections[0].text.includes('narrower path first'), '19: ask-before-full-scan rule present');
-  assert.ok(sections[0].text.length < 580, '19: prevention text stays compact');
+  assert.ok(sections[0].text.length < 750, '19: prevention text stays compact');
   assert.ok(!sections[0].text.includes('fail-log-guide'), '19: skill-load recovery is not mixed into prevention text');
   assert.strictEqual(sections[1].name, 'fail-logger:top-errors', '19: top-errors section name');
   assert.strictEqual(sections[1].order, 185, '19: top-errors order at 185');
@@ -450,14 +455,15 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   const top = sections[1].text({});
   assert.ok(top.includes('Other recent recurring tool failures'), '19: top-errors title marks non-static failures');
   assert.ok(top.includes('[grep]') && top.includes('×3'), '19: top-errors renders non-static high-frequency failures');
-  assert.ok(!top.includes('[read]') && !top.includes('not found'), '19: static-prevention failures are filtered out of top-errors');
+  assert.ok(!top.includes('[read]') && !top.includes('not found in "D'), '19: static-prevention path-not-found failures are filtered out of top-errors');
+  assert.ok(top.includes('[edit]') && top.includes('old_string was not found'), '19: edit-trio is no longer blind-filtered from top-errors');
   assert.ok(!top.includes('command') && !top.includes('args'), '19: top-errors excludes raw args');
   assert.ok(!top.includes('先确认'), '19: top-errors is data-only and does not duplicate prevention tips');
   assert.strictEqual(sections[2].name, 'fail-logger:recovery', '19: recovery section name');
   assert.strictEqual(sections[2].order, 190, '19: recovery order at 190');
   assert.ok(sections[2].text.includes('After a failed tool call') && sections[2].text.includes('check the recurring failures above') && sections[2].text.includes('fail-log-guide'), '19: recovery text is skill-on-repeat, not MUST-always');
   assert.ok(!sections[2].text.includes('you MUST load'), '19: MUST-always recovery removed');
-  assert.ok(!sections[0].text.includes('before writing'), '19: no DSH-base-duplicated read-first rule');
+  assert.ok(!sections[0].text.includes('before writing'), '19: no DSH-base-duplicated read-first wording');
   // 关
   sections = [];
   const ctx2 = { on: () => {}, systemPrompt: { section: (s) => sections.push(s) }, effect: (fn) => { fn(); return () => {}; } };
@@ -504,7 +510,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   ctx.emit('tool/result', resultReal('c21i', 'Error: cannot read "D:\\Code\\test\\牛客网_用户120063338_20250508.png" as an image: model "deepseek-v4-flash" does not declare image input', true));
   await sleep(450);
   const s = readState(dir);
-  assert.strictEqual(s.schemaVersion, 2, '21: schema version written');
+  assert.strictEqual(s.schemaVersion, 3, '21: schema version written');
   const rc = Object.values(s.entries).find(e => e.message === 'ReferenceError: require is not defined');
   assert.ok(rc && rc.kind === 'exception' && rc.code === 'CODE_RUN_FAILED', '21: real Error-prefixed run_code parsed and code stored');
   const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
@@ -532,7 +538,7 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   assert.ok(migrated && migrated.count === 3, '22: legacy [run_code] migrated to official kind');
   assert.ok(!Object.values(s.entries).some(e => e.message.startsWith('[run_code]')), '22: legacy key removed');
   assert.ok(!Object.values(s.entries).some(e => e.message === '[x] bad date'), '22: invalid first date dropped');
-  assert.strictEqual(s.schemaVersion, 2, '22: migrated schema version');
+  assert.strictEqual(s.schemaVersion, 3, '22: migrated schema version');
   rmSync(dir, { recursive: true, force: true });
 }
 
@@ -590,4 +596,161 @@ const readState = (dir) => JSON.parse(readFileSync(join(dir, '.failures.json'), 
   rmSync(dir, { recursive: true, force: true });
 }
 
-console.log('ALL TESTS PASS ✅ (25 suites)');
+// ===== 26：message/args 同源成对更新（张冠李戴回归）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f26-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  // 「进程 A」：a.md 的 edit 失败
+  const s1 = mkCtx();
+  mod.apply(s1, { flushMs: 100 });
+  s1.emit('tool/call', call('c26a', 'edit', { file_path: 'D:\\proj-a\\a.md', old_string: 'x' }));
+  s1.emit('tool/result', resultReal('c26a', 'old_string was not found in "D:\\proj-a\\a.md"', true));
+  await sleep(350);
+  s1.dispose();
+  // 「进程 B」：同族错误、不同路径 b.md（归一化后同键）
+  const s2 = mkCtx();
+  mod.apply(s2, { flushMs: 100 });
+  s2.emit('tool/call', call('c26b', 'edit', { file_path: 'D:\\proj-b\\b.md', old_string: 'y' }));
+  s2.emit('tool/result', resultReal('c26b', 'old_string was not found in "D:\\proj-b\\b.md"', true));
+  await sleep(350);
+  s2.dispose();
+  const s = readState(dir);
+  assert.strictEqual(Object.keys(s.entries).length, 1, '26: same normalized key merged into one entry');
+  const e = Object.values(s.entries)[0];
+  assert.strictEqual(e.count, 2, '26: count accumulated across processes');
+  assert.ok(e.message.includes('b.md') && e.args.includes('b.md'), '26: message and args come from the same occurrence');
+  assert.ok(!e.message.includes('a.md'), '26: stale first-occurrence message replaced');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 27：TTL 归档不删除 + 复发复活 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f27-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const old = new Date(Date.now() - 40 * 86400e3).toISOString();
+  const msg = '[bash] Error: ancient failure unique-token';
+  writeFileSync(join(dir, '.failures.json'), JSON.stringify({
+    schemaVersion: 3, totalEvents: 7,
+    entries: { [hashOf('tool', normKey(msg))]: { kind: 'tool', message: msg, count: 7, first: old, last: old } },
+    days: {}
+  }));
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { flushMs: 100, ttlDays: 30 });
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'trigger flush recent', true));
+  await sleep(350);
+  let s = readState(dir);
+  const archived = Object.values(s.entries).find(e => e.message === msg);
+  assert.ok(archived, '27: TTL archives instead of deleting');
+  assert.strictEqual(archived.archived, true, '27: entry marked archived');
+  assert.strictEqual(archived.count, 7, '27: historical count preserved');
+  const skill = readFileSync(join(dir, 'SKILL.md'), 'utf8');
+  assert.ok(!skill.includes('ancient failure unique-token'), '27: archived entry hidden from render');
+  // 复发 → 复活且累计计数延续
+  ctx.emit('tool/call', call('c27', 'bash'));
+  ctx.emit('tool/result', resultReal('c27', 'Error: ancient failure unique-token', true));
+  await sleep(350);
+  s = readState(dir);
+  const revived = Object.values(s.entries).find(e => e.message.includes('ancient failure unique-token'));
+  assert.ok(revived && revived.archived === undefined, '27: recurrence revives archived entry');
+  assert.strictEqual(revived.count, 8, '27: count continues from history (not reset to 1)');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 28：totalEvents 累计 + 外部重置回归告警 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f28-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { flushMs: 100 });
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'regress one', true));
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'regress two', true));
+  await sleep(350);
+  let s = readState(dir);
+  assert.strictEqual(s.totalEvents, 2, '28: totalEvents written');
+  // 外部把账本重置回更小的 totalEvents（模拟条目静默丢失）
+  s.totalEvents = 1;
+  writeFileSync(join(dir, '.failures.json'), JSON.stringify(s));
+  const warns = [];
+  const origWarn = console.warn;
+  console.warn = (...a) => { warns.push(a.join(' ')); };
+  try {
+    ctx.emit('tool/code-dispatch', dispatch('bash', 'regress three', true));
+    await sleep(350);
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.ok(warns.some(w => w.includes('ledger regression detected')), '28: external reset warned');
+  s = readState(dir);
+  assert.strictEqual(s.totalEvents, 2, '28: totalEvents merges from reset disk base (1+1)');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 29：陈旧锁回收前验证持锁 pid 存活 =====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f29-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { flushMs: 100 });
+  const lockPath = join(dir, '.failures.json.lock');
+  // 存活进程（本进程 pid）持有的陈旧锁：不得回收
+  writeFileSync(lockPath, String(process.pid));
+  utimesSync(lockPath, new Date(Date.now() - 10000), new Date(Date.now() - 10000));
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'alive lock', true));
+  await sleep(700);
+  assert.ok(existsSync(lockPath), '29: live-owner stale lock is not reclaimed');
+  let written = false;
+  try { readState(dir); written = true; } catch {}
+  assert.ok(!written, '29: flush deferred while live process holds lock');
+  // 换成死 pid 的陈旧锁：应回收并落盘
+  let deadPid = 4000000;
+  for (;;) {
+    try { process.kill(deadPid, 0); deadPid += 7; continue; } catch (e) { if (e && e.code === 'EPERM') { deadPid += 7; continue; } break; }
+  }
+  writeFileSync(lockPath, String(deadPid));
+  utimesSync(lockPath, new Date(Date.now() - 10000), new Date(Date.now() - 10000));
+  await sleep(1200);   // 等 500ms 重试 + 回收 + 再重试
+  const s = readState(dir);
+  assert.ok(Object.values(s.entries).some(e => e.message.includes('alive lock')), '29: flushed after dead-owner lock reclaimed');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ===== 30：error.code 键漂移合并（v2→v3）=====
+{
+  const dir = mkdtempSync(join(tmpdir(), 'f30-'));
+  process.env.FAIL_LOG_DIR = dir;
+  writeFileSync(join(dir, 'SKILL.md'), SKILL);
+  const now = new Date().toISOString();
+  const msg = '[bash] drift merge check';
+  const legacyKey = hashOf('tool', normKey(msg));
+  const codedKey = hashOf('tool:DRIFT', normKey(msg));
+  writeFileSync(join(dir, '.failures.json'), JSON.stringify({
+    schemaVersion: 2,
+    entries: {
+      [legacyKey]: { kind: 'tool', message: msg, count: 2, first: now, last: now },
+      [codedKey]: { kind: 'tool', message: msg, count: 3, first: now, last: now, code: 'DRIFT' }
+    },
+    days: {}
+  }));
+  const mod = await import(MOD);
+  const ctx = mkCtx();
+  mod.apply(ctx, { flushMs: 100 });
+  ctx.emit('tool/code-dispatch', dispatch('bash', 'flush trigger drift', true));
+  await sleep(350);
+  const s = readState(dir);
+  assert.strictEqual(s.schemaVersion, 3, '30: schema bumped to 3');
+  const merged = Object.values(s.entries).filter(e => e.message === msg);
+  assert.strictEqual(merged.length, 1, '30: drifted key pair merged into one entry');
+  assert.strictEqual(merged[0].count, 5, '30: counts summed');
+  assert.strictEqual(merged[0].code, 'DRIFT', '30: code kept');
+  rmSync(dir, { recursive: true, force: true });
+}
+
+console.log('ALL TESTS PASS ✅ (30 suites)');
